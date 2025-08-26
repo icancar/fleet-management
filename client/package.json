@@ -1,0 +1,50 @@
+{
+  "name": "@fleet-management/client",
+  "version": "1.0.0",
+  "description": "Fleet Management System Frontend",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
+  },
+  "dependencies": {
+    "@fleet-management/shared": "1.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.18.0",
+    "react-query": "^3.39.3",
+    "axios": "^1.6.0",
+    "recharts": "^2.8.0",
+    "react-hook-form": "^7.47.0",
+    "react-hot-toast": "^2.4.1",
+    "lucide-react": "^0.292.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0",
+    "date-fns": "^2.30.0",
+    "react-datepicker": "^4.21.0",
+    "@types/react-datepicker": "^4.19.4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@typescript-eslint/eslint-plugin": "^6.9.1",
+    "@typescript-eslint/parser": "^6.9.1",
+    "@vitejs/plugin-react": "^4.1.1",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.52.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.5",
+    "typescript": "^5.2.2",
+    "vite": "^4.5.0",
+    "vitest": "^0.34.6",
+    "@vitest/ui": "^0.34.6"
+  }
+}
