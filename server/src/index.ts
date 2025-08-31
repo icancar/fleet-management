@@ -23,7 +23,11 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: [
+    process.env.CLIENT_URL || 'http://localhost:3000',
+    'http://192.168.1.2:3000',
+    'http://192.168.1.2:3001'
+  ],
   credentials: true
 }));
 app.use(morgan('combined'));
@@ -54,10 +58,11 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚗 Fleet Management Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
+  console.log(`🌐 Network accessible: http://192.168.1.2:${PORT}/api`);
 });
 
 export default app;

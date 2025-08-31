@@ -141,24 +141,40 @@ class LocationTrackingService : LifecycleService() {
         // Send location to server
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val locationData = LocationData(
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    accuracy = location.accuracy,
-                    timestamp = Date(),
-                    speed = location.speed,
-                    bearing = location.bearing,
-                    altitude = location.altitude
-                )
+                               val locationData = LocationData.create(
+                   latitude = location.latitude,
+                   longitude = location.longitude,
+                   accuracy = location.accuracy,
+                   timestamp = Date(),
+                   speed = location.speed,
+                   bearing = location.bearing,
+                   altitude = location.altitude
+               )
+                
+                // Log the data being sent
+                val debugMessage = "Sending: ${location.latitude}, ${location.longitude} to http://192.168.1.2:3001/api/location"
+                println(debugMessage)
                 
                 val response = apiService.sendLocation(locationData)
                 
-                // Log success (in production, you might want to store this locally)
-                println("Location sent successfully: ${location.latitude}, ${location.longitude}")
+                if (response.isSuccessful) {
+                    println("✅ Location sent successfully: ${location.latitude}, ${location.longitude}")
+                    // Send broadcast to update UI
+                    sendBroadcast(Intent("LOCATION_SENT_SUCCESS").apply {
+                        putExtra("message", "Location sent: ${location.latitude}, ${location.longitude}")
+                    })
+                } else {
+                    println("❌ Failed to send location: HTTP ${response.code()}")
+                    sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
+                        putExtra("message", "Failed to send: HTTP ${response.code()}")
+                    })
+                }
                 
             } catch (e: Exception) {
-                // Log error (in production, you might want to retry or store locally)
-                println("Failed to send location: ${e.message}")
+                println("❌ Exception sending location: ${e.message}")
+                sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
+                    putExtra("message", "Exception: ${e.message}")
+                })
             }
         }
     }

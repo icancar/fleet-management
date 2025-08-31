@@ -21,10 +21,30 @@
         android:text="Location tracking stopped"
         android:textSize="16sp"
         android:gravity="center"
-        android:layout_marginBottom="32dp"
+        android:layout_marginBottom="16dp"
         android:padding="16dp"
         android:background="#F5F5F5"
         android:textColor="#666666" />
+
+    <TextView
+        android:id="@+id/serverUrlText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Server: http://192.168.1.2:3001/api/location"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:layout_marginBottom="16dp"
+        android:textColor="#666666" />
+
+    <TextView
+        android:id="@+id/debugText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Debug: No location data yet"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:layout_marginBottom="32dp"
+        android:textColor="#FF6B6B" />
 
     <Button
         android:id="@+id/startButton"

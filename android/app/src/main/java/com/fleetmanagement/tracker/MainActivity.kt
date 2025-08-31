@@ -1,7 +1,10 @@
 package com.fleetmanagement.tracker
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Button
@@ -16,14 +19,19 @@ class MainActivity : AppCompatActivity() {
     
     private lateinit var viewModel: MainViewModel
     private lateinit var statusText: TextView
+    private lateinit var serverUrlText: TextView
+    private lateinit var debugText: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
-        private const val PERMISSIONS = arrayOf(
+        private val PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            Manifest.permission.FOREGROUND_SERVICE,
+            Manifest.permission.WAKE_LOCK
         )
     }
     
@@ -40,6 +48,8 @@ class MainActivity : AppCompatActivity() {
     
     private fun initViews() {
         statusText = findViewById(R.id.statusText)
+        serverUrlText = findViewById(R.id.serverUrlText)
+        debugText = findViewById(R.id.debugText)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         
@@ -62,6 +72,25 @@ class MainActivity : AppCompatActivity() {
         viewModel.lastLocation.observe(this) { location ->
             statusText.text = "Last Location: ${location.latitude}, ${location.longitude}"
         }
+        
+        // Register broadcast receiver for debug messages
+        registerReceiver(object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    "LOCATION_SENT_SUCCESS" -> {
+                        val message = intent.getStringExtra("message") ?: "Location sent successfully"
+                        updateDebugInfo(message)
+                    }
+                    "LOCATION_SENT_FAILED" -> {
+                        val message = intent.getStringExtra("message") ?: "Failed to send location"
+                        updateDebugInfo(message)
+                    }
+                }
+            }
+        }, IntentFilter().apply {
+            addAction("LOCATION_SENT_SUCCESS")
+            addAction("LOCATION_SENT_FAILED")
+        })
     }
     
     private fun checkPermissions(): Boolean {
@@ -117,8 +146,16 @@ class MainActivity : AppCompatActivity() {
         
         if (isTracking) {
             statusText.text = "Location tracking is active"
+            debugText.text = "Debug: Waiting for location updates..."
         } else {
             statusText.text = "Location tracking stopped"
+            debugText.text = "Debug: No location data yet"
+        }
+    }
+
+    fun updateDebugInfo(message: String) {
+        runOnUiThread {
+            debugText.text = "Debug: $message"
         }
     }
 }

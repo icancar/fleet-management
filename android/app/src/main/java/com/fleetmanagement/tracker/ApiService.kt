@@ -12,8 +12,7 @@ interface ApiService {
     companion object {
         fun create(): ApiService {
             return retrofit2.Retrofit.Builder()
-                .baseUrl("http://10.0.2.2:3001/api/") // For Android emulator
-                // .baseUrl("http://192.168.1.100:3001/api/") // For real device (replace with your server IP)
+                            .baseUrl("http://192.168.1.2:3001/api/") // Your computer's IP
                 .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
                 .build()
                 .create(ApiService::class.java)

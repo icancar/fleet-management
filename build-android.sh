@@ -11,36 +11,37 @@ fi
 
 cd android
 
+# Set Android SDK path
+export ANDROID_HOME=/Users/igorcancar/Library/Android/sdk
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+
 # Check if Android SDK is available
-if ! command -v sdkmanager &> /dev/null; then
+if [ ! -d "$ANDROID_HOME" ]; then
     echo "❌ Android SDK not found. Installing command line tools..."
     
     # Create Android SDK directory
-    mkdir -p $HOME/Library/Android/sdk
+    mkdir -p $ANDROID_HOME
     
     # Download command line tools
     echo "📥 Downloading Android command line tools..."
-    curl -o cmdline-tools.zip "https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip"
+    curl -L -o cmdline-tools.zip "https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip"
     
     # Extract to Android SDK
-    unzip -q cmdline-tools.zip -d $HOME/Library/Android/sdk/
-    mv $HOME/Library/Android/sdk/cmdline-tools $HOME/Library/Android/sdk/cmdline-tools/latest
+    unzip -q cmdline-tools.zip -d $ANDROID_HOME/
+    mv $ANDROID_HOME/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
     
     # Clean up
     rm cmdline-tools.zip
     
-    # Add to PATH
-    export ANDROID_HOME=$HOME/Library/Android/sdk
-    export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-    export PATH=$PATH:$ANDROID_HOME/platform-tools
-    
     echo "✅ Android SDK installed at $ANDROID_HOME"
+else
+    echo "✅ Android SDK found at $ANDROID_HOME"
 fi
 
-# Set environment variables
-export ANDROID_HOME=$HOME/Library/Android/sdk
-export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-export PATH=$PATH:$ANDROID_HOME/platform-tools
+# Update local.properties with correct SDK path
+echo "🔧 Updating local.properties..."
+echo "sdk.dir=$ANDROID_HOME" > local.properties
 
 # Accept licenses
 echo "📝 Accepting Android licenses..."
@@ -49,6 +50,9 @@ yes | sdkmanager --licenses > /dev/null 2>&1
 # Install required SDK components
 echo "🔧 Installing required SDK components..."
 sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1
+
+# Make gradlew executable
+chmod +x gradlew
 
 # Build the APK
 echo "🏗️ Building APK..."
