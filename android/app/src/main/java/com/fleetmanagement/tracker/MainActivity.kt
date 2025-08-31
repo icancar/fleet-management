@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var debugText: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
+    private lateinit var viewRoutesButton: Button
     
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -52,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         debugText = findViewById(R.id.debugText)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
+        viewRoutesButton = findViewById(R.id.viewRoutesButton)
         
         startButton.setOnClickListener {
             if (checkPermissions()) {
@@ -61,6 +63,11 @@ class MainActivity : AppCompatActivity() {
         
         stopButton.setOnClickListener {
             stopLocationTracking()
+        }
+        
+        viewRoutesButton.setOnClickListener {
+            val intent = Intent(this, RouteMapActivity::class.java)
+            startActivity(intent)
         }
     }
     
