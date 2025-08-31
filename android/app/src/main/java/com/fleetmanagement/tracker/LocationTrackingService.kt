@@ -11,6 +11,7 @@ import androidx.lifecycle.LifecycleService
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import java.util.*
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 class LocationTrackingService : LifecycleService() {
     
@@ -141,43 +142,78 @@ class LocationTrackingService : LifecycleService() {
         // Send location to server
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                               val locationData = LocationData.create(
-                   latitude = location.latitude,
-                   longitude = location.longitude,
-                   accuracy = location.accuracy,
-                   timestamp = Date(),
-                   speed = location.speed,
-                   bearing = location.bearing,
-                   altitude = location.altitude
-               )
+                val locationData = LocationData.create(
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    accuracy = location.accuracy,
+                    timestamp = Date(),
+                    speed = location.speed,
+                    bearing = location.bearing,
+                    altitude = location.altitude,
+                    deviceId = getDeviceIdentifier()
+                )
                 
                 // Log the data being sent
-                val debugMessage = "Sending: ${location.latitude}, ${location.longitude} to http://192.168.1.2:3001/api/location"
+                val debugMessage = "Sending: ${location.latitude}, ${location.longitude} to http://192.168.1.2:3001/api/location with device: ${getDeviceIdentifier()}"
                 println(debugMessage)
                 
                 val response = apiService.sendLocation(locationData)
                 
                 if (response.isSuccessful) {
                     println("✅ Location sent successfully: ${location.latitude}, ${location.longitude}")
-                    // Send broadcast to update UI
-                    sendBroadcast(Intent("LOCATION_SENT_SUCCESS").apply {
-                        putExtra("message", "Location sent: ${location.latitude}, ${location.longitude}")
-                    })
+                    // Send local broadcast to update map automatically
+                    LocalBroadcastManager.getInstance(this@LocationTrackingService)
+                        .sendBroadcast(Intent("LOCATION_SENT_SUCCESS").apply {
+                            putExtra("message", "Location sent: ${location.latitude}, ${location.longitude}")
+                        })
                 } else {
                     println("❌ Failed to send location: HTTP ${response.code()}")
-                    sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
-                        putExtra("message", "Failed to send: HTTP ${response.code()}")
-                    })
+                    LocalBroadcastManager.getInstance(this@LocationTrackingService)
+                        .sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
+                            putExtra("message", "Failed to send: HTTP ${response.code()}")
+                        })
                 }
                 
             } catch (e: Exception) {
                 println("❌ Exception sending location: ${e.message}")
-                sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
-                    putExtra("message", "Exception: ${e.message}")
-                })
+                LocalBroadcastManager.getInstance(this@LocationTrackingService)
+                    .sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
+                        putExtra("message", "Exception: ${e.message}")
+                    })
             }
         }
     }
     
     fun isTracking(): Boolean = isTracking
+
+    private fun getDeviceIdentifier(): String {
+        return getDeviceFingerprint()
+    }
+    
+    private fun getDeviceFingerprint(): String {
+        return try {
+            val deviceId = android.provider.Settings.Secure.getString(
+                contentResolver, 
+                android.provider.Settings.Secure.ANDROID_ID
+            )
+            
+            val manufacturer = android.os.Build.MANUFACTURER
+            val model = android.os.Build.MODEL
+            val androidVersion = android.os.Build.VERSION.RELEASE
+            
+            // Create a unique fingerprint combining multiple device identifiers
+            val fingerprint = "${manufacturer}_${model}_${androidVersion}_$deviceId"
+                .replace(" ", "_")
+                .replace("-", "_")
+                .uppercase()
+            
+            // Take first 16 characters to keep it manageable
+            fingerprint.take(16)
+            
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Fallback to a combination of available identifiers
+            "${android.os.Build.MANUFACTURER}_${android.os.Build.MODEL}".uppercase()
+        }
+    }
 }

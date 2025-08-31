@@ -1,16 +1,18 @@
 package com.fleetmanagement.tracker
 
+import android.app.DatePickerDialog
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
-import com.google.android.gms.maps.model.MarkerOptions
-import com.google.android.gms.maps.model.PolylineOptions
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
@@ -19,15 +21,47 @@ import java.util.*
 import java.net.URL
 import java.net.HttpURLConnection
 
-class RouteMapActivity : AppCompatActivity(), OnMapReadyCallback {
+class RouteMapActivity : AppCompatActivity() {
     
-    private lateinit var mMap: GoogleMap
+    private lateinit var webView: WebView
     private lateinit var statsText: TextView
     private lateinit var distanceText: TextView
     private lateinit var durationText: TextView
     private lateinit var speedText: TextView
     
     private val gson = Gson()
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private val displayDateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.US)
+    private var currentSelectedDate = ""
+    
+    // Variables to store current map state for zoom preservation
+    private var currentZoomLevel = 15
+    private var currentCenterLat = 0.0
+    private var currentCenterLon = 0.0
+    private var isInitialLoad = true
+    
+    // Store start point coordinates for quick return
+    private var startPointLat = 0.0
+    private var startPointLon = 0.0
+    
+    // Broadcast receiver for automatic map updates
+    private val locationUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                "LOCATION_SENT_SUCCESS" -> {
+                    // Automatically refresh the map when new location is sent
+                    println("🗺️ Auto-refreshing map due to new location data")
+                    // Use smooth update instead of full reload to prevent flickering
+                    updateRouteDataSmoothly(currentSelectedDate)
+                }
+                "LOCATION_SENT_FAILED" -> {
+                    // Optionally show error message
+                    val message = intent.getStringExtra("message") ?: "Location send failed"
+                    println("❌ $message")
+                }
+            }
+        }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,44 +73,150 @@ class RouteMapActivity : AppCompatActivity(), OnMapReadyCallback {
         durationText = findViewById(R.id.durationText)
         speedText = findViewById(R.id.speedText)
         
-        // Initialize map
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
+        // Initialize WebView
+        webView = findViewById(R.id.map)
+        webView.settings.javaScriptEnabled = true
+        webView.webViewClient = WebViewClient()
         
-        // Load route data
-        loadRouteData()
+        // Add JavaScript interface for map state communication
+        webView.addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun updateMapState(zoom: Int, lat: Double, lng: Double) {
+                currentZoomLevel = zoom
+                currentCenterLat = lat
+                currentCenterLon = lng
+                isInitialLoad = false
+            }
+        }, "Android")
+        
+        // Set current date as default
+        currentSelectedDate = getTodayDate()
+        
+        // Load route data for today by default
+        loadRouteData(currentSelectedDate, preserveZoom = false)
         
         // Set up refresh button
         findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.refreshButton).setOnClickListener {
-            loadRouteData()
+            loadRouteData(currentSelectedDate, preserveZoom = false)
+        }
+        
+        // Set up return to start button
+        findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.returnToStartButton).setOnClickListener {
+            returnToStartPoint()
+        }
+        
+        // Register broadcast receiver for automatic map updates
+        registerLocationUpdateReceiver()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Unregister broadcast receiver
+        unregisterLocationUpdateReceiver()
+    }
+    
+    private fun registerLocationUpdateReceiver() {
+        val filter = IntentFilter().apply {
+            addAction("LOCATION_SENT_SUCCESS")
+            addAction("LOCATION_SENT_FAILED")
+        }
+        LocalBroadcastManager.getInstance(this).registerReceiver(locationUpdateReceiver, filter)
+    }
+    
+    private fun unregisterLocationUpdateReceiver() {
+        try {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(locationUpdateReceiver)
+        } catch (e: Exception) {
+            // Receiver might not be registered
         }
     }
     
-    override fun onMapReady(googleMap: GoogleMap) {
-        mMap = googleMap
-        
-        // Set map settings
-        mMap.uiSettings.isZoomControlsEnabled = true
-        mMap.uiSettings.isMyLocationButtonEnabled = true
-        
-        // Set default location (Belgrade)
-        val belgrade = LatLng(44.7866, 20.4489)
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(belgrade, 12f))
+    // Return to start point functionality with zoom preservation
+    private fun returnToStartPoint() {
+        if (startPointLat != 0.0 && startPointLon != 0.0) {
+            println("🗺️ Returning to start point: $startPointLat, $startPointLon with current zoom: $currentZoomLevel")
+            val returnScript = """
+                (function() {
+                    if (map && map.setView) {
+                        // Preserve current zoom level when returning to start point
+                        map.setView([$startPointLat, $startPointLon], $currentZoomLevel);
+                        console.log('Returned to start point with preserved zoom level');
+                    }
+                })();
+            """.trimIndent()
+            webView.evaluateJavascript(returnScript, null)
+        } else {
+            println("❌ Start point coordinates not available")
+        }
     }
     
-    private fun loadRouteData() {
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.route_map_menu, menu)
+        return true
+    }
+    
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_select_date -> {
+                showDatePicker()
+                true
+            }
+            R.id.action_today -> {
+                currentSelectedDate = getTodayDate()
+                loadRouteData(currentSelectedDate, preserveZoom = false)
+                true
+            }
+            R.id.action_yesterday -> {
+                currentSelectedDate = getYesterdayDate()
+                loadRouteData(currentSelectedDate, preserveZoom = false)
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+    
+    private fun showDatePicker() {
+        val calendar = Calendar.getInstance()
+        val year = calendar.get(Calendar.YEAR)
+        val month = calendar.get(Calendar.MONTH)
+        val day = calendar.get(Calendar.DAY_OF_MONTH)
+        
+        val datePickerDialog = DatePickerDialog(
+            this,
+            { _, selectedYear, selectedMonth, selectedDay ->
+                val selectedDate = Calendar.getInstance().apply {
+                    set(selectedYear, selectedMonth, selectedDay)
+                }.time
+                currentSelectedDate = dateFormat.format(selectedDate)
+                loadRouteData(currentSelectedDate, preserveZoom = false)
+            },
+            year, month, day
+        )
+        
+        // Set max date to today
+        datePickerDialog.datePicker.maxDate = System.currentTimeMillis()
+        datePickerDialog.show()
+    }
+    
+    private fun getTodayDate(): String {
+        return dateFormat.format(Date())
+    }
+    
+    private fun getYesterdayDate(): String {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, -1)
+        return dateFormat.format(calendar.time)
+    }
+    
+    private fun loadRouteData(date: String, preserveZoom: Boolean = false) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Get today's date
-                val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                
-                // Load routes for today
-                val routes = loadRoutesForDate(today)
+                // Load routes for selected date
+                val routes = loadRoutesForDate(date)
                 
                 // Update UI on main thread
                 withContext(Dispatchers.Main) {
-                    displayRoutes(routes)
+                    displayRoutes(routes, date, preserveZoom)
                     updateStats(routes)
                 }
                 
@@ -87,6 +227,88 @@ class RouteMapActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
             }
         }
+    }
+    
+    // New method for smooth updates without flickering
+    private fun updateRouteDataSmoothly(date: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Load routes for selected date
+                val routes = loadRoutesForDate(date)
+                
+                // Update UI on main thread
+                withContext(Dispatchers.Main) {
+                    // Update only the route data in the existing map (no HTML reload)
+                    updateRouteDataOnly(routes)
+                    updateStats(routes)
+                }
+                
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    statsText.text = "Error updating routes: ${e.message}"
+                }
+            }
+        }
+    }
+    
+    // Update only route data without reloading the entire map
+    private fun updateRouteDataOnly(routes: List<DailyRoute>) {
+        if (routes.isEmpty()) return
+        
+        // Execute JavaScript to update route data smoothly
+        val updateScript = createRouteUpdateScript(routes)
+        webView.evaluateJavascript(updateScript, null)
+    }
+    
+    // Create JavaScript to update routes without reloading
+    private fun createRouteUpdateScript(routes: List<DailyRoute>): String {
+        if (routes.isEmpty()) return ""
+        
+        val route = routes.first()
+        val points = route.routePoints
+        
+        if (points.size < 2) return ""
+        
+        return """
+            (function() {
+                // Clear existing route
+                if (window.currentPolyline) {
+                    map.removeLayer(window.currentPolyline);
+                }
+                if (window.currentMarkers) {
+                    window.currentMarkers.forEach(function(marker) {
+                        map.removeLayer(marker);
+                    });
+                }
+                
+                // Create new route points
+                var routePoints = [
+                    ${points.map { "[${it.latitude}, ${it.longitude}]" }.joinToString(",\n                    ")}
+                ];
+                
+                // Add new polyline
+                window.currentPolyline = L.polyline(routePoints, {
+                    color: 'blue',
+                    weight: 4,
+                    opacity: 0.8
+                }).addTo(map);
+                
+                // Add start and end markers
+                window.currentMarkers = [];
+                
+                var startMarker = L.marker(routePoints[0]).addTo(map)
+                    .bindPopup('<b>Start</b><br>${formatTime(points.first().timestamp)}');
+                window.currentMarkers.push(startMarker);
+                
+                var endMarker = L.marker(routePoints[routePoints.length - 1]).addTo(map)
+                    .bindPopup('<b>End</b><br>${formatTime(points.last().timestamp)}');
+                window.currentMarkers.push(endMarker);
+                
+                // Keep current zoom and center (no fitBounds)
+                console.log('Route updated smoothly without flickering');
+            })();
+        """.trimIndent()
     }
     
     private suspend fun loadRoutesForDate(date: String): List<DailyRoute> {
@@ -120,13 +342,13 @@ class RouteMapActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
     
-    private fun displayRoutes(routes: List<DailyRoute>) {
+    private fun displayRoutes(routes: List<DailyRoute>, date: String, preserveZoom: Boolean = false) {
         if (routes.isEmpty()) {
-            statsText.text = "No routes found for today"
+            statsText.text = "No routes found for ${displayDateFormat.format(dateFormat.parse(date)!!)}"
+            webView.loadData("<html><body><h2>No routes found for this date</h2></body></html>", "text/html", "UTF-8")
             return
         }
         
-        val bounds = LatLngBounds.Builder()
         var totalDistance = 0.0
         var totalDuration = 0.0
         var totalPoints = 0
@@ -135,49 +357,111 @@ class RouteMapActivity : AppCompatActivity(), OnMapReadyCallback {
             totalDistance += route.totalDistance
             totalDuration += route.totalDuration
             totalPoints += route.totalPoints
-            
-            // Draw route line
-            if (route.routePoints.size >= 2) {
-                val polylineOptions = PolylineOptions()
-                    .color(0xFF2196F3.toInt()) // Blue color
-                    .width(8f)
-                
-                route.routePoints.forEach { point ->
-                    val latLng = LatLng(point.latitude, point.longitude)
-                    polylineOptions.add(latLng)
-                    bounds.include(latLng)
-                }
-                
-                mMap.addPolyline(polylineOptions)
-                
-                // Add start and end markers
-                val startPoint = route.routePoints.first()
-                val endPoint = route.routePoints.last()
-                
-                mMap.addMarker(MarkerOptions()
-                    .position(LatLng(startPoint.latitude, startPoint.longitude))
-                    .title("Start")
-                    .snippet("${formatTime(startPoint.timestamp)}"))
-                
-                mMap.addMarker(MarkerOptions()
-                    .position(LatLng(endPoint.latitude, endPoint.longitude))
-                    .title("End")
-                    .snippet("${formatTime(endPoint.timestamp)}"))
-            }
         }
         
-        // Animate camera to show all routes
-        try {
-            val boundsBuilt = bounds.build()
-            mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilt, 100))
-        } catch (e: Exception) {
-            // If bounds are invalid, just zoom to a default location
-            val belgrade = LatLng(44.7866, 20.4489)
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(belgrade, 12f))
+        // Store start point coordinates for return to start functionality
+        if (routes.isNotEmpty() && routes.first().routePoints.isNotEmpty()) {
+            val firstPoint = routes.first().routePoints.first()
+            startPointLat = firstPoint.latitude
+            startPointLon = firstPoint.longitude
+            println("📍 Start point stored: $startPointLat, $startPointLon")
         }
+        
+        // Create HTML with OpenStreetMap and route visualization
+        val html = createMapHTML(routes, preserveZoom)
+        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
         
         // Update statistics
         updateStatsDisplay(totalDistance, totalDuration, totalPoints)
+    }
+    
+    private fun createMapHTML(routes: List<DailyRoute>, preserveZoom: Boolean = false): String {
+        if (routes.isEmpty()) return "<html><body><h2>No routes available</h2></body></html>"
+        
+        val route = routes.first() // Show first route for now
+        val points = route.routePoints
+        
+        if (points.size < 2) return "<html><body><h2>Insufficient route points</h2></body></html>"
+        
+        // Calculate center point
+        val centerLat = points.map { it.latitude }.average()
+        val centerLon = points.map { it.longitude }.average()
+        
+        // Use preserved zoom/center if available and preserving zoom
+        val mapLat = if (preserveZoom && !isInitialLoad) currentCenterLat else centerLat
+        val mapLon = if (preserveZoom && !isInitialLoad) currentCenterLon else centerLon
+        val mapZoom = if (preserveZoom && !isInitialLoad) currentZoomLevel else 15
+        
+        // Store current map state for future preservation
+        if (!isInitialLoad) {
+            currentCenterLat = mapLat
+            currentCenterLon = mapLon
+        }
+        
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+            <style>
+                body { margin: 0; padding: 0; }
+                #map { height: 100vh; width: 100%; }
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            <script>
+                var map = L.map('map', {
+                    zoomControl: false
+                }).setView([$mapLat, $mapLon], $mapZoom);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                var routePoints = [
+                    ${points.map { "[${it.latitude}, ${it.longitude}]" }.joinToString(",\n                    ")}
+                ];
+                
+                var polyline = L.polyline(routePoints, {
+                    color: 'blue',
+                    weight: 4,
+                    opacity: 0.8
+                }).addTo(map);
+                
+                // Store reference for smooth updates
+                window.currentPolyline = polyline;
+                window.currentMarkers = [];
+                
+                // Add start marker
+                var startMarker = L.marker(routePoints[0]).addTo(map)
+                    .bindPopup('<b>Start</b><br>${formatTime(points.first().timestamp)}');
+                window.currentMarkers.push(startMarker);
+                
+                // Add end marker
+                var endMarker = L.marker(routePoints[routePoints.length - 1]).addTo(map)
+                    .bindPopup('<b>End</b><br>${formatTime(points.last().timestamp)}');
+                window.currentMarkers.push(endMarker);
+                
+                // Only fit bounds on initial load or manual refresh (not auto-refresh)
+                if (!${preserveZoom}) {
+                    map.fitBounds(polyline.getBounds());
+                }
+                
+                // Store current zoom and center for preservation
+                map.on('zoomend', function() {
+                    window.Android.updateMapState(map.getZoom(), map.getCenter().lat, map.getCenter().lng);
+                });
+                
+                map.on('moveend', function() {
+                    window.Android.updateMapState(map.getZoom(), map.getCenter().lat, map.getCenter().lng);
+                });
+            </script>
+        </body>
+        </html>
+        """.trimIndent()
     }
     
     private fun updateStats(routes: List<DailyRoute>) {
@@ -186,7 +470,6 @@ class RouteMapActivity : AppCompatActivity(), OnMapReadyCallback {
         val totalDistance = routes.sumOf { it.totalDistance }
         val totalDuration = routes.sumOf { it.totalDuration }
         val totalPoints = routes.sumOf { it.totalPoints }
-        val averageSpeed = routes.mapNotNull { it.averageSpeed }.average()
         
         updateStatsDisplay(totalDistance, totalDuration, totalPoints)
     }
@@ -198,7 +481,34 @@ class RouteMapActivity : AppCompatActivity(), OnMapReadyCallback {
     }
     
     private fun getDeviceIdentifier(): String {
-        return android.os.Build.SERIAL.takeIf { it != "unknown" } ?: "unknown"
+        return getDeviceFingerprint()
+    }
+    
+    private fun getDeviceFingerprint(): String {
+        return try {
+            val deviceId = android.provider.Settings.Secure.getString(
+                contentResolver, 
+                android.provider.Settings.Secure.ANDROID_ID
+            )
+            
+            val manufacturer = android.os.Build.MANUFACTURER
+            val model = android.os.Build.MODEL
+            val androidVersion = android.os.Build.VERSION.RELEASE
+            
+            // Create a unique fingerprint combining multiple device identifiers
+            val fingerprint = "${manufacturer}_${model}_${androidVersion}_$deviceId"
+                .replace(" ", "_")
+                .replace("-", "_")
+                .uppercase()
+            
+            // Take first 16 characters to keep it manageable
+            fingerprint.take(16)
+            
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Fallback to a combination of available identifiers
+            "${android.os.Build.MANUFACTURER}_${android.os.Build.MODEL}".uppercase()
+        }
     }
     
     private fun formatDistance(meters: Double): String {
