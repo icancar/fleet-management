@@ -9,6 +9,7 @@ import {
   MapPin, 
   Wrench, 
   Fuel, 
+  Route, 
   BarChart3, 
   Settings,
   LogOut,
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Trips', href: '/trips', icon: MapPin },
   { name: 'Maintenance', href: '/maintenance', icon: Wrench },
   { name: 'Fuel', href: '/fuel', icon: Fuel },
+  { name: 'Routes', href: '/routes', icon: Route },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

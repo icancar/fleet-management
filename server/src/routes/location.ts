@@ -28,4 +28,15 @@ router.get('/', locationController.getLocationHistory);
 // GET /api/location/:deviceId - Get location history for specific device
 router.get('/:deviceId', locationController.getDeviceLocationHistory);
 
+// NEW ROUTE ENDPOINTS FOR ROUTE VISUALIZATION
+
+// GET /api/location/routes/all - Get all daily routes for all devices
+router.get('/routes/all', locationController.getAllDailyRoutes);
+
+// GET /api/location/routes/device/:deviceId - Get daily routes for specific device
+router.get('/routes/device/:deviceId', locationController.getDeviceDailyRoutes);
+
+// GET /api/location/routes/stats/:deviceId - Get route statistics for specific device
+router.get('/routes/stats/:deviceId', locationController.getDeviceRouteStats);
+
 export { router as locationRoutes };

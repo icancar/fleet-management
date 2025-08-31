@@ -84,4 +84,100 @@ export class LocationController {
       next(error);
     }
   };
+
+  // New method: Get daily routes for a specific device
+  getDeviceDailyRoutes = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { deviceId } = req.params;
+      const { date } = req.query;
+      
+      const routes = await this.locationService.getDeviceDailyRoutes(deviceId, date as string);
+      
+      const response: ApiResponse<any> = {
+        success: true,
+        data: routes,
+        message: `Daily routes for device ${deviceId}`
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // New method: Get all daily routes for all devices
+  getAllDailyRoutes = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { date } = req.query;
+      
+      const routes = await this.locationService.getAllDailyRoutes(date as string);
+      
+      const response: ApiResponse<any> = {
+        success: true,
+        data: routes,
+        message: 'All daily routes'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // New method: Get route statistics for a device
+  getDeviceRouteStats = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { deviceId } = req.params;
+      const { days = 7 } = req.query;
+      
+      const numDays = Number(days);
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - numDays);
+      
+      const routes = await this.locationService.getDeviceDailyRoutes(deviceId);
+      const recentRoutes = routes.filter(route => {
+        const routeDate = new Date(route.date);
+        return routeDate >= startDate && routeDate <= endDate;
+      });
+      
+      // Calculate statistics
+      const totalDistance = recentRoutes.reduce((sum, route) => sum + route.totalDistance, 0);
+      const totalDuration = recentRoutes.reduce((sum, route) => sum + route.totalDuration, 0);
+      const totalPoints = recentRoutes.reduce((sum, route) => sum + route.totalPoints, 0);
+      const averageSpeed = recentRoutes.length > 0 
+        ? recentRoutes.reduce((sum, route) => sum + route.averageSpeed, 0) / recentRoutes.length 
+        : 0;
+      const maxSpeed = recentRoutes.length > 0 
+        ? Math.max(...recentRoutes.map(route => route.maxSpeed)) 
+        : 0;
+      
+      const stats = {
+        deviceId,
+        period: `${numDays} days`,
+        totalRoutes: recentRoutes.length,
+        totalDistance,
+        totalDuration,
+        totalPoints,
+        averageSpeed,
+        maxSpeed,
+        dailyBreakdown: recentRoutes.map(route => ({
+          date: route.date,
+          distance: route.totalDistance,
+          duration: route.totalDuration,
+          points: route.totalPoints
+        }))
+      };
+      
+      const response: ApiResponse<any> = {
+        success: true,
+        data: stats,
+        message: `Route statistics for device ${deviceId}`
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
