@@ -33,7 +33,8 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_BACKGROUND_LOCATION,
             Manifest.permission.FOREGROUND_SERVICE,
             Manifest.permission.WAKE_LOCK,
-            Manifest.permission.ACCESS_WIFI_STATE
+            Manifest.permission.ACCESS_WIFI_STATE,
+            Manifest.permission.READ_PHONE_STATE
         )
     }
     

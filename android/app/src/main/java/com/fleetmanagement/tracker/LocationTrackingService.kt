@@ -12,6 +12,7 @@ import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import java.util.*
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import android.content.Context
 
 class LocationTrackingService : LifecycleService() {
     
@@ -201,19 +202,59 @@ class LocationTrackingService : LifecycleService() {
             val model = android.os.Build.MODEL
             val androidVersion = android.os.Build.VERSION.RELEASE
             
+            // Try to get IMEI number (may not be available on all devices)
+            val imei = getImeiNumber()
+            
             // Create a unique fingerprint combining multiple device identifiers
-            val fingerprint = "${manufacturer}_${model}_${androidVersion}_$deviceId"
+            val fingerprint = if (imei != null) {
+                "${manufacturer}_${model}_${androidVersion}_${imei.takeLast(8)}"
+            } else {
+                "${manufacturer}_${model}_${androidVersion}_${deviceId.take(8)}"
+            }
                 .replace(" ", "_")
                 .replace("-", "_")
                 .uppercase()
             
-            // Take first 16 characters to keep it manageable
-            fingerprint.take(16)
+            // Take first 20 characters to accommodate IMEI
+            fingerprint.take(20)
             
         } catch (e: Exception) {
             e.printStackTrace()
             // Fallback to a combination of available identifiers
             "${android.os.Build.MANUFACTURER}_${android.os.Build.MODEL}".uppercase()
+        }
+    }
+    
+    private fun getImeiNumber(): String? {
+        return try {
+            val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+            
+            // Check if we have the required permission
+            if (checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                // For Android 10+ (API 29+), IMEI access is restricted
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    // Try to get IMEI using reflection (may not work on all devices)
+                    try {
+                        val method = telephonyManager.javaClass.getMethod("getImei")
+                        method.invoke(telephonyManager) as? String
+                    } catch (e: Exception) {
+                        // Fallback to getDeviceId for older devices
+                        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+                            telephonyManager.deviceId
+                        } else {
+                            null
+                        }
+                    }
+                } else {
+                    // For older Android versions, use deviceId
+                    telephonyManager.deviceId
+                }
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 }
