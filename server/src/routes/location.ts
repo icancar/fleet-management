@@ -39,4 +39,12 @@ router.get('/routes/device/:deviceId', locationController.getDeviceDailyRoutes);
 // GET /api/location/routes/stats/:deviceId - Get route statistics for specific device
 router.get('/routes/stats/:deviceId', locationController.getDeviceRouteStats);
 
+// NEW DEVICE MANAGEMENT ENDPOINTS
+
+// GET /api/location/devices - Get all devices
+router.get('/devices', locationController.getAllDevices);
+
+// GET /api/location/devices/:deviceId/stats - Get device statistics
+router.get('/devices/:deviceId/stats', locationController.getDeviceStats);
+
 export { router as locationRoutes };

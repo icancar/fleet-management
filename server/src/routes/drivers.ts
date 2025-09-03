@@ -9,7 +9,7 @@ const driverController = new DriverController();
 const validateDriver = [
   body('name').isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
   body('licenseNumber').isLength({ min: 5 }).withMessage('License number must be at least 5 characters'),
-  body('phone').isMobilePhone().withMessage('Valid phone number is required'),
+  body('phone').isMobilePhone('any').withMessage('Valid phone number is required'),
   body('email').isEmail().withMessage('Valid email is required'),
   validateRequest
 ];

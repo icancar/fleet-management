@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { LocationService } from '../services/LocationService';
+import { LocationDatabaseService } from '../services/LocationDatabaseService';
 import { createError } from '../middleware/errorHandler';
 import { ApiResponse } from '@fleet-management/shared';
 
@@ -25,13 +26,13 @@ export class LocationController {
       console.log(`   Timestamp: ${new Date(locationData.timestamp).toLocaleString()}`);
       console.log('   ──────────────────────────────────────────\n');
 
-      // Save to database
-      const savedLocation = await this.locationService.saveLocation(locationData);
+      // Save to MongoDB
+      const savedLocation = await LocationDatabaseService.saveLocationData(locationData);
       
       const response: ApiResponse<any> = {
         success: true,
         data: savedLocation,
-        message: 'Location received successfully'
+        message: 'Location received and saved to MongoDB successfully'
       };
 
       res.status(201).json(response);
@@ -91,7 +92,7 @@ export class LocationController {
       const { deviceId } = req.params;
       const { date } = req.query;
       
-      const routes = await this.locationService.getDeviceDailyRoutes(deviceId, date as string);
+      const routes = await LocationDatabaseService.getDeviceDailyRoutes(deviceId, date as string);
       
       const response: ApiResponse<any> = {
         success: true,
@@ -173,6 +174,49 @@ export class LocationController {
         success: true,
         data: stats,
         message: `Route statistics for device ${deviceId}`
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // New method: Get all devices
+  getAllDevices = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const devices = await LocationDatabaseService.getAllDevices();
+      
+      const response: ApiResponse<any> = {
+        success: true,
+        data: devices,
+        message: 'All devices retrieved successfully'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // New method: Get device statistics
+  getDeviceStats = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { deviceId } = req.params;
+      
+      const stats = await LocationDatabaseService.getDeviceStats(deviceId);
+      
+      if (!stats) {
+        return res.status(404).json({
+          success: false,
+          message: 'Device not found'
+        });
+      }
+      
+      const response: ApiResponse<any> = {
+        success: true,
+        data: stats,
+        message: `Device statistics for ${deviceId}`
       };
 
       res.json(response);

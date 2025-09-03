@@ -13,12 +13,13 @@ import { maintenanceRoutes } from './routes/maintenance';
 import { fuelRoutes } from './routes/fuel';
 import { dashboardRoutes } from './routes/dashboard';
 import { locationRoutes } from './routes/location';
+import { connectDatabase } from './config/database';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 // Middleware
 app.use(helmet());
@@ -58,11 +59,25 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚗 Fleet Management Server running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
-  console.log(`🌐 Network accessible: http://192.168.1.2:${PORT}/api`);
-});
+const startServer = async () => {
+  try {
+    // Connect to MongoDB
+    await connectDatabase();
+    
+    // Start Express server
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚗 Fleet Management Server running on port ${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+      console.log(`🔗 API Base URL: http://localhost:${PORT}/api`);
+      console.log(`🌐 Network accessible: http://192.168.1.2:${PORT}/api`);
+      console.log(`🗄️ MongoDB connected and ready`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;
