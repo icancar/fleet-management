@@ -3,6 +3,8 @@ import { LocationService } from '../services/LocationService';
 import { LocationDatabaseService } from '../services/LocationDatabaseService';
 import { createError } from '../middleware/errorHandler';
 import { ApiResponse } from '@fleet-management/shared';
+import { UserRole } from '../models/User';
+import { Device } from '../models/Device';
 
 export class LocationController {
   private locationService: LocationService;
@@ -223,5 +225,85 @@ export class LocationController {
     } catch (error) {
       next(error);
     }
+  };
+
+  // New method: Get location data with user-based access control
+  getLocationDataWithAccessControl = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const currentUser = (req as any).user;
+      const { deviceId, date } = req.query;
+
+      let allowedDeviceIds: string[] = [];
+
+      // Determine which devices the user can access
+      switch (currentUser.role) {
+        case UserRole.COMPANY_OWNER:
+          // Company owner can see all devices in their company
+          const companyDevices = await Device.find({ 
+            companyId: currentUser.companyId,
+            isActive: true 
+          });
+          allowedDeviceIds = companyDevices.map(device => device.deviceId);
+          break;
+
+        case UserRole.MANAGER:
+          // Manager can see devices of their assigned drivers
+          const managerDevices = await Device.find({ 
+            userId: { $in: await this.getManagedUserIds(currentUser._id) },
+            isActive: true 
+          });
+          allowedDeviceIds = managerDevices.map(device => device.deviceId);
+          break;
+
+        case UserRole.DRIVER:
+          // Driver can only see their own devices
+          const driverDevices = await Device.find({ 
+            userId: currentUser._id,
+            isActive: true 
+          });
+          allowedDeviceIds = driverDevices.map(device => device.deviceId);
+          break;
+      }
+
+      // If specific deviceId is requested, check if user has access
+      if (deviceId && !allowedDeviceIds.includes(deviceId as string)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied to this device'
+        });
+      }
+
+      // Get location data
+      const targetDeviceId = deviceId as string || allowedDeviceIds[0];
+      if (!targetDeviceId) {
+        return res.json({
+          success: true,
+          data: [],
+          message: 'No accessible devices found'
+        });
+      }
+
+      const routes = await LocationDatabaseService.getDeviceDailyRoutes(targetDeviceId, date as string);
+      
+      const response: ApiResponse<any> = {
+        success: true,
+        data: routes,
+        message: `Location data for device ${targetDeviceId}`
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Helper method to get managed user IDs for a manager
+  private async getManagedUserIds(managerId: string): Promise<string[]> {
+    const { User } = await import('../models/User');
+    const managedUsers = await User.find({ 
+      managerId,
+      isActive: true 
+    });
+    return managedUsers.map(user => (user._id as any).toString());
   };
 }

@@ -7,6 +7,8 @@ export interface IDevice extends Document {
   deviceModel?: string;
   androidVersion?: string;
   imei?: string;
+  userId?: string; // Link device to a user (driver)
+  companyId?: string; // Link device to a company
   firstSeen: Date;
   lastSeen: Date;
   totalLocations: number;
@@ -38,6 +40,14 @@ const DeviceSchema = new Schema<IDevice>({
   imei: {
     type: String
   },
+  userId: {
+    type: String,
+    ref: 'User'
+  },
+  companyId: {
+    type: String,
+    ref: 'Company'
+  },
   firstSeen: {
     type: Date,
     default: Date.now
@@ -60,6 +70,8 @@ const DeviceSchema = new Schema<IDevice>({
 
 // Index for efficient queries
 DeviceSchema.index({ deviceId: 1 });
+DeviceSchema.index({ userId: 1 });
+DeviceSchema.index({ companyId: 1 });
 DeviceSchema.index({ lastSeen: -1 });
 DeviceSchema.index({ isActive: 1 });
 

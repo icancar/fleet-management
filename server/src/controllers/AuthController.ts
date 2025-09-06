@@ -1,142 +1,151 @@
 import { Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { createError } from '../middleware/errorHandler';
+import { AuthService } from '../services/AuthService';
+import { UserRole } from '../models/User';
 import { ApiResponse } from '@fleet-management/shared';
 
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  password: string;
-}
-
-// Mock user database - in production, use a real database
-const users: User[] = [
-  {
-    id: '1',
-    email: 'admin@fleet.com',
-    name: 'Admin User',
-    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' // password
-  }
-];
-
 export class AuthController {
-  
-  login = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { email, password } = req.body;
-      
-      const user = users.find(u => u.email === email);
-      if (!user) {
-        const error = createError('Invalid credentials', 401);
-        return next(error);
-      }
-      
-      const isValidPassword = await bcrypt.compare(password, user.password);
-      if (!isValidPassword) {
-        const error = createError('Invalid credentials', 401);
-        return next(error);
-      }
-      
-      const token = jwt.sign(
-        { userId: user.id, email: user.email },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '24h' }
-      );
-      
-      const response: ApiResponse<any> = {
-        success: true,
-        data: {
-          token,
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name
-          }
-        },
-        message: 'Login successful'
-      };
-      
-      res.json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-  
+  /**
+   * Register a new user
+   */
   register = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { email, password, name } = req.body;
-      
-      const existingUser = users.find(u => u.email === email);
-      if (existingUser) {
-        const error = createError('User already exists', 400);
-        return next(error);
-      }
-      
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const newUser: User = {
-        id: Date.now().toString(),
+      const { email, password, firstName, lastName, role, phone, companyId, managerId } = req.body;
+
+      const result = await AuthService.register({
         email,
-        name,
-        password: hashedPassword
-      };
-      
-      users.push(newUser);
-      
-      const token = jwt.sign(
-        { userId: newUser.id, email: newUser.email },
-        process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '24h' }
-      );
-      
+        password,
+        firstName,
+        lastName,
+        role: role || UserRole.DRIVER,
+        phone,
+        companyId,
+        managerId
+      });
+
       const response: ApiResponse<any> = {
         success: true,
-        data: {
-          token,
-          user: {
-            id: newUser.id,
-            email: newUser.email,
-            name: newUser.name
-          }
-        },
-        message: 'Registration successful'
+        data: result,
+        message: 'User registered successfully'
       };
-      
+
       res.status(201).json(response);
     } catch (error) {
       next(error);
     }
   };
-  
-  logout = async (req: Request, res: Response, next: NextFunction) => {
+
+  /**
+   * Login user
+   */
+  login = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // In a real app, you might want to blacklist the token
+      const { email, password } = req.body;
+
+      const result = await AuthService.login({ email, password });
+
       const response: ApiResponse<any> = {
         success: true,
-        data: null,
-        message: 'Logout successful'
+        data: result,
+        message: 'Login successful'
       };
-      
+
       res.json(response);
     } catch (error) {
       next(error);
     }
   };
-  
-  getCurrentUser = async (req: Request, res: Response, next: NextFunction) => {
+
+  /**
+   * Create company with owner
+   */
+  createCompanyWithOwner = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // In a real app, you'd get this from the JWT token
+      const { company, owner } = req.body;
+
+      const result = await AuthService.createCompanyWithOwner(company, owner);
+
       const response: ApiResponse<any> = {
         success: true,
-        data: {
-          id: '1',
-          email: 'admin@fleet.com',
-          name: 'Admin User'
-        },
-        message: 'Current user retrieved'
+        data: result,
+        message: 'Company and owner created successfully'
       };
-      
+
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Get current user profile
+   */
+  getProfile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = (req as any).user;
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: user,
+        message: 'Profile retrieved successfully'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Update user profile
+   */
+  updateProfile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = (req as any).user._id;
+      const { firstName, lastName, phone } = req.body;
+
+      // Update user profile (excluding sensitive fields)
+      const updatedUser = await AuthService.getUserById(userId);
+      if (!updatedUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Update allowed fields
+      if (firstName) updatedUser.firstName = firstName;
+      if (lastName) updatedUser.lastName = lastName;
+      if (phone !== undefined) updatedUser.phone = phone;
+
+      await updatedUser.save();
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: updatedUser.toJSON(),
+        message: 'Profile updated successfully'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Change password
+   */
+  changePassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = (req as any).user._id;
+      const { currentPassword, newPassword } = req.body;
+
+      await AuthService.updatePassword(userId, currentPassword, newPassword);
+
+      const response: ApiResponse<any> = {
+        success: true,
+        message: 'Password changed successfully'
+      };
+
       res.json(response);
     } catch (error) {
       next(error);
