@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
 import { User, UserRole } from '../models/User';
+
+// Load environment variables
+dotenv.config();
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -18,22 +22,55 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-    const user = await User.findById(decoded.userId).select('-password');
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+    
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (jwtError) {
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid token format'
+      });
+    }
 
-    if (!user || !user.isActive) {
+    if (!decoded.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid token payload'
+      });
+    }
+
+    let user;
+    try {
+      user = await User.findById(decoded.userId).select('-password');
+    } catch (dbError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Database error'
+      });
+    }
+
+    if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid or inactive user'
+        message: 'User not found'
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account deactivated'
       });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    return res.status(403).json({
+    return res.status(500).json({
       success: false,
-      message: 'Invalid token'
+      message: 'Authentication error'
     });
   }
 };
@@ -58,6 +95,6 @@ export const requireRole = (roles: UserRole[]) => {
   };
 };
 
-export const requireCompanyOwner = requireRole([UserRole.COMPANY_OWNER]);
-export const requireManager = requireRole([UserRole.MANAGER, UserRole.COMPANY_OWNER]);
-export const requireDriver = requireRole([UserRole.DRIVER, UserRole.MANAGER, UserRole.COMPANY_OWNER]);
+export const requireAdmin = requireRole([UserRole.ADMIN]);
+export const requireManager = requireRole([UserRole.MANAGER, UserRole.ADMIN]);
+export const requireDriver = requireRole([UserRole.DRIVER, UserRole.MANAGER, UserRole.ADMIN]);

@@ -1,14 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/authService';
-
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: string;
-}
+import { User, UserRole } from '@shared/types';
 
 interface AuthContextType {
   user: User | null;

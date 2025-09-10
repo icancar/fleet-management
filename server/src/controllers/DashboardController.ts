@@ -1,78 +1,148 @@
 import { Request, Response, NextFunction } from 'express';
+import { Vehicle } from '../models/Vehicle';
+import { User, UserRole } from '../models/User';
 import { ApiResponse } from '@fleet-management/shared';
 
 export class DashboardController {
   
-  getStats = async (req: Request, res: Response, next: NextFunction) => {
+  getDashboardStats = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const currentUser = (req as any).user;
+      const companyId = currentUser.companyId;
+
+      // Get total vehicles count
+      const totalVehicles = await Vehicle.countDocuments({ companyId });
+      
+      // Get all vehicles to calculate dynamic status
+      const allVehicles = await Vehicle.find({ companyId });
+      
+      // Calculate dynamic status for each vehicle
+      const now = new Date();
+      const tenDaysFromNow = new Date();
+      tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
+      
+      let activeVehicles = 0;
+      let maintenanceVehicles = 0;
+      const vehiclesInMaintenance: any[] = [];
+      
+      for (const vehicle of allVehicles) {
+        const serviceDate = new Date(vehicle.nextServiceDate);
+        const isMaintenanceDue = serviceDate <= tenDaysFromNow;
+        
+        if (isMaintenanceDue) {
+          maintenanceVehicles++;
+          vehiclesInMaintenance.push(vehicle);
+          // Update the vehicle status in database and local array
+          if (vehicle.status !== 'maintenance') {
+            await Vehicle.findByIdAndUpdate(vehicle._id, { status: 'maintenance' });
+            vehicle.status = 'maintenance'; // Update local array
+          }
+        } else {
+          activeVehicles++;
+          // Reset to active if it was previously maintenance but service is now far enough away
+          if (vehicle.status === 'maintenance') {
+            await Vehicle.findByIdAndUpdate(vehicle._id, { status: 'active' });
+            vehicle.status = 'active'; // Update local array
+          }
+        }
+      }
+
+      // Get out of service vehicles
+      const outOfServiceVehicles = await Vehicle.countDocuments({ 
+        companyId, 
+        status: 'out_of_service' 
+      });
+
+      // Get total drivers count
+      const totalDrivers = await User.countDocuments({ 
+        companyId, 
+        role: UserRole.DRIVER, 
+        isActive: true 
+      });
+
+      // Get assigned drivers count - use updated status
+      const assignedDrivers = allVehicles.filter(vehicle => {
+        return vehicle.status === 'active' && vehicle.driverId;
+      }).length;
+
+      // Get unassigned vehicles count - use updated status
+      const unassignedVehicles = allVehicles.filter(vehicle => {
+        return vehicle.status === 'active' && !vehicle.driverId;
+      }).length;
+
+      // Get overdue vehicles (service date has passed) - use dynamic status
+      const overdueVehicles = vehiclesInMaintenance.filter(vehicle => {
+        const serviceDate = new Date(vehicle.nextServiceDate);
+        return serviceDate < now;
+      }).length;
+
+      // Get vehicles due for service (within next 10 days but not overdue) - mutually exclusive with overdue
+      const vehiclesDueForService = vehiclesInMaintenance.length - overdueVehicles;
+
+      // Get total odometer reading - use updated status
+      const activeVehiclesWithOdometer = allVehicles.filter(vehicle => {
+        return vehicle.status === 'active';
+      });
+      
+      const totalMileage = activeVehiclesWithOdometer.reduce((sum, vehicle) => sum + vehicle.odometer, 0);
+
+      // Get recent vehicles (created in last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const recentVehicles = await Vehicle.find({ 
+        companyId,
+        createdAt: { $gte: thirtyDaysAgo }
+      }).populate('driverId', 'firstName lastName').sort({ createdAt: -1 }).limit(5);
+
+      // Get maintenance alerts (vehicles currently in maintenance status)
+      const maintenanceAlerts = vehiclesInMaintenance
+        .sort((a, b) => new Date(a.nextServiceDate).getTime() - new Date(b.nextServiceDate).getTime())
+        .slice(0, 5);
+      
+      // Populate driver information for maintenance alerts
+      for (const vehicle of maintenanceAlerts) {
+        if (vehicle.driverId) {
+          const driver = await User.findById(vehicle.driverId).select('firstName lastName');
+          if (driver) {
+            (vehicle as any).driverId = driver;
+          }
+        }
+      }
+
       const stats = {
-        totalVehicles: 5,
-        activeTrips: 2,
-        totalDrivers: 3,
-        maintenanceAlerts: 1,
-        fuelConsumption: 45.2,
-        totalDistance: 1250.5
-      };
-      
-      const response: ApiResponse<any> = {
-        success: true,
-        data: stats,
-        message: 'Dashboard stats retrieved successfully'
-      };
-      
-      res.json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-  
-  getRecentActivity = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const activities = [
-        {
-          id: '1',
-          type: 'TRIP_STARTED',
-          description: 'Trip started from NYC to Boston',
-          timestamp: new Date().toISOString(),
-          vehicleId: 'V001'
+        vehicles: {
+          total: totalVehicles,
+          active: activeVehicles,
+          maintenance: maintenanceVehicles,
+          outOfService: outOfServiceVehicles,
+          unassigned: unassignedVehicles,
+          dueForService: vehiclesDueForService,
+          overdue: overdueVehicles
         },
-        {
-          id: '2',
-          type: 'MAINTENANCE_COMPLETED',
-          description: 'Oil change completed for V002',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          vehicleId: 'V002'
+        drivers: {
+          total: totalDrivers,
+          assigned: assignedDrivers,
+          unassigned: totalDrivers - assignedDrivers
+        },
+        mileage: {
+          total: totalMileage,
+          average: totalMileage / Math.max(activeVehicles, 1)
         }
-      ];
-      
-      const response: ApiResponse<any> = {
-        success: true,
-        data: activities,
-        message: 'Recent activity retrieved successfully'
       };
-      
-      res.json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-  
-  getAlerts = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const alerts = [
-        {
-          id: '1',
-          type: 'MAINTENANCE_DUE',
-          severity: 'MEDIUM',
-          message: 'Vehicle V003 maintenance due in 500 miles',
-          vehicleId: 'V003'
-        }
-      ];
-      
+
+      const recentActivity = {
+        recentVehicles,
+        maintenanceAlerts
+      };
+
       const response: ApiResponse<any> = {
         success: true,
-        data: alerts,
-        message: 'Alerts retrieved successfully'
+        data: {
+          stats,
+          recentActivity
+        },
+        message: 'Dashboard stats retrieved successfully'
       };
       
       res.json(response);

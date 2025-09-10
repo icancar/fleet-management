@@ -96,6 +96,29 @@ export class AuthController {
   };
 
   /**
+   * Get current user profile
+   */
+  getMe = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = (req as any).user; // This comes from the auth middleware
+      
+      if (!user) {
+        return res.status(401).json({ success: false, message: 'User not authenticated' });
+      }
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: user,
+        message: 'User profile retrieved successfully'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Update user profile
    */
   updateProfile = async (req: Request, res: Response, next: NextFunction) => {

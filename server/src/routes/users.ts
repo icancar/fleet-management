@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { validateRequest } from '../middleware/validation';
-import { authenticateToken, requireManager, requireCompanyOwner } from '../middleware/auth';
+import { authenticateToken, requireManager, requireAdmin } from '../middleware/auth';
 import { UserController } from '../controllers/UserController';
 import { UserRole } from '../models/User';
 
@@ -28,7 +28,7 @@ router.get('/', userController.getAllUsers);
 // Get user by ID
 router.get('/:userId', userController.getUserById);
 
-// Create new user (Manager or Company Owner only)
+// Create new user (Manager or Admin only)
 router.post('/', requireManager, validateUser, userController.createUser);
 
 // Update user

@@ -17,25 +17,48 @@ import {
   Search
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { UserRole } from '@shared/types';
 import { cn } from '../utils/cn';
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Vehicles', href: '/vehicles', icon: Car },
-  { name: 'Drivers', href: '/drivers', icon: Users },
-  { name: 'Trips', href: '/trips', icon: MapPin },
-  { name: 'Maintenance', href: '/maintenance', icon: Wrench },
-  { name: 'Fuel', href: '/fuel', icon: Fuel },
-  { name: 'Routes', href: '/routes', icon: Route },
-  { name: 'Reports', href: '/reports', icon: BarChart3 },
-  { name: 'Settings', href: '/settings', icon: Settings },
-];
+const getNavigation = (userRole: UserRole) => {
+  const baseNavigation = [
+    { name: 'Dashboard', href: '/', icon: Home },
+  ];
+
+  // Add role-specific navigation
+  switch (userRole) {
+    case UserRole.DRIVER:
+      return [
+        ...baseNavigation,
+        { name: 'My Vehicle', href: '/vehicles', icon: Car },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ];
+    case UserRole.MANAGER:
+      return [
+        ...baseNavigation,
+        { name: 'Drivers', href: '/drivers', icon: Users },
+        { name: 'Vehicles', href: '/vehicles', icon: Car },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ];
+    case UserRole.ADMIN:
+      return [
+        ...baseNavigation,
+        { name: 'Employees', href: '/drivers', icon: Users },
+        { name: 'Vehicles', href: '/vehicles', icon: Car },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ];
+    default:
+      return baseNavigation;
+  }
+};
 
 export const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  const navigation = user ? getNavigation(user.role) : [];
 
   const handleLogout = () => {
     logout();
@@ -135,9 +158,12 @@ export const Layout: React.FC = () => {
                 <div className="flex items-center">
                   <div className="ml-3">
                     <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                      {user?.email}
+                      {user?.firstName} {user?.lastName}
                     </p>
                     <p className="text-xs font-medium text-gray-500 group-hover:text-gray-700">
+                      {user?.role?.replace('_', ' ').toUpperCase()}
+                    </p>
+                    <p className="text-xs font-medium text-gray-400 group-hover:text-gray-600">
                       Sign out
                     </p>
                   </div>

@@ -1,35 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
 import { createError } from '../middleware/errorHandler';
 import { ApiResponse } from '@fleet-management/shared';
-
-interface Driver {
-  id: string;
-  name: string;
-  licenseNumber: string;
-  phone: string;
-  email: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  createdAt: string;
-}
-
-// Mock driver database
-const drivers: Driver[] = [
-  {
-    id: '1',
-    name: 'John Doe',
-    licenseNumber: 'DL123456',
-    phone: '+1234567890',
-    email: 'john.doe@fleet.com',
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString()
-  }
-];
+import { User, UserRole, IUser } from '../models/User';
 
 export class DriverController {
   
   getAllDrivers = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const response: ApiResponse<Driver[]> = {
+      const currentUser = (req as any).user;
+      let drivers: IUser[];
+
+      switch (currentUser.role) {
+        case UserRole.ADMIN:
+          // Admin can see all drivers in their company
+          drivers = await User.find({ 
+            companyId: currentUser.companyId,
+            role: UserRole.DRIVER,
+            isActive: true 
+          }).select('-password').populate('managerId', 'firstName lastName email role');
+          break;
+
+        case UserRole.MANAGER:
+          // Manager can see their assigned drivers
+          drivers = await User.find({ 
+            managerId: currentUser._id,
+            role: UserRole.DRIVER,
+            isActive: true 
+          }).select('-password').populate('managerId', 'firstName lastName email role');
+          break;
+
+        default:
+          return res.status(403).json({
+            success: false,
+            message: 'Insufficient permissions'
+          });
+      }
+
+      const response: ApiResponse<IUser[]> = {
         success: true,
         data: drivers,
         message: 'Drivers retrieved successfully'
@@ -40,18 +47,83 @@ export class DriverController {
       next(error);
     }
   };
+
+  // New method for getting all employees (managers + drivers) for Admin
+  getAllEmployees = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const currentUser = (req as any).user;
+
+
+      if (currentUser.role !== UserRole.ADMIN) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only admins can view all employees'
+        });
+      }
+
+      // Get all managers and drivers in the company
+      const [managers, drivers] = await Promise.all([
+        User.find({ 
+          companyId: currentUser.companyId,
+          role: UserRole.MANAGER,
+          isActive: true 
+        }).select('-password').populate('managerId', 'firstName lastName email role'),
+        
+        User.find({ 
+          companyId: currentUser.companyId,
+          role: UserRole.DRIVER,
+          isActive: true 
+        }).select('-password').populate('managerId', 'firstName lastName email role')
+      ]);
+
+
+      const response: ApiResponse<{ managers: IUser[], drivers: IUser[] }> = {
+        success: true,
+        data: { managers, drivers },
+        message: 'Employees retrieved successfully'
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error('Error in getAllEmployees:', error);
+      next(error);
+    }
+  };
   
   getDriverById = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const driver = drivers.find(d => d.id === id);
-      
+      const currentUser = (req as any).user;
+
+      const driver = await User.findOne({ 
+        _id: id, 
+        role: UserRole.DRIVER,
+        isActive: true 
+      }).select('-password');
+
       if (!driver) {
-        const error = createError('Driver not found', 404);
-        return next(error);
+        return res.status(404).json({
+          success: false,
+          message: 'Driver not found'
+        });
+      }
+
+      // Check permissions
+      if (currentUser.role === UserRole.MANAGER && driver.managerId && driver.managerId.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Can only view your assigned drivers'
+        });
+      }
+
+      if (currentUser.role === UserRole.ADMIN && driver.companyId !== currentUser.companyId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Can only view drivers from your company'
+        });
       }
       
-      const response: ApiResponse<Driver> = {
+      const response: ApiResponse<IUser> = {
         success: true,
         data: driver,
         message: 'Driver retrieved successfully'
@@ -65,23 +137,44 @@ export class DriverController {
   
   createDriver = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { name, licenseNumber, phone, email } = req.body;
-      
-      const newDriver: Driver = {
-        id: Date.now().toString(),
-        name,
-        licenseNumber,
-        phone,
+      const currentUser = (req as any).user;
+      const { email, password, firstName, lastName, phone, managerId } = req.body;
+
+      // Check permissions
+      if (currentUser.role === UserRole.DRIVER) {
+        return res.status(403).json({
+          success: false,
+          message: 'Drivers cannot create other drivers'
+        });
+      }
+
+      // Determine managerId based on user role
+      let assignedManagerId;
+      if (currentUser.role === UserRole.MANAGER) {
+        // If current user is a manager, they become the manager of the new driver
+        assignedManagerId = currentUser._id;
+      } else if (currentUser.role === UserRole.ADMIN) {
+        // If current user is admin, use the managerId from the request
+        assignedManagerId = managerId;
+      }
+
+      // Create new driver
+      const driver = new User({
         email,
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString()
-      };
+        password,
+        firstName,
+        lastName,
+        role: UserRole.DRIVER,
+        phone,
+        companyId: currentUser.companyId,
+        managerId: assignedManagerId
+      });
+
+      await driver.save();
       
-      drivers.push(newDriver);
-      
-      const response: ApiResponse<Driver> = {
+      const response: ApiResponse<IUser> = {
         success: true,
-        data: newDriver,
+        data: driver.toJSON(),
         message: 'Driver created successfully'
       };
       
@@ -94,19 +187,48 @@ export class DriverController {
   updateDriver = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const driverIndex = drivers.findIndex(d => d.id === id);
-      
-      if (driverIndex === -1) {
-        const error = createError('Driver not found', 404);
-        return next(error);
+      const currentUser = (req as any).user;
+      const { firstName, lastName, phone, isActive } = req.body;
+
+      const driver = await User.findOne({ 
+        _id: id, 
+        role: UserRole.DRIVER,
+        isActive: true 
+      });
+
+      if (!driver) {
+        return res.status(404).json({
+          success: false,
+          message: 'Driver not found'
+        });
       }
+
+      // Check permissions
+      if (currentUser.role === UserRole.MANAGER && driver.managerId && driver.managerId.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Can only update your assigned drivers'
+        });
+      }
+
+      if (currentUser.role === UserRole.ADMIN && driver.companyId !== currentUser.companyId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Can only update drivers from your company'
+        });
+      }
+
+      // Update allowed fields
+      if (firstName) driver.firstName = firstName;
+      if (lastName) driver.lastName = lastName;
+      if (phone !== undefined) driver.phone = phone;
+      if (isActive !== undefined) driver.isActive = isActive;
+
+      await driver.save();
       
-      const updatedDriver = { ...drivers[driverIndex], ...req.body };
-      drivers[driverIndex] = updatedDriver;
-      
-      const response: ApiResponse<Driver> = {
+      const response: ApiResponse<IUser> = {
         success: true,
-        data: updatedDriver,
+        data: driver.toJSON(),
         message: 'Driver updated successfully'
       };
       
@@ -119,19 +241,197 @@ export class DriverController {
   deleteDriver = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const driverIndex = drivers.findIndex(d => d.id === id);
-      
-      if (driverIndex === -1) {
-        const error = createError('Driver not found', 404);
-        return next(error);
+      const currentUser = (req as any).user;
+
+      const driver = await User.findOne({ 
+        _id: id, 
+        role: UserRole.DRIVER,
+        isActive: true 
+      });
+
+      if (!driver) {
+        return res.status(404).json({
+          success: false,
+          message: 'Driver not found'
+        });
       }
-      
-      drivers.splice(driverIndex, 1);
+
+      // Check permissions
+      if (currentUser.role === UserRole.MANAGER && driver.managerId && driver.managerId.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Can only delete your assigned drivers'
+        });
+      }
+
+      if (currentUser.role === UserRole.ADMIN && driver.companyId !== currentUser.companyId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Can only delete drivers from your company'
+        });
+      }
+
+      // Soft delete
+      driver.isActive = false;
+      await driver.save();
       
       const response: ApiResponse<null> = {
         success: true,
         data: null,
-        message: 'Driver deleted successfully'
+        message: 'Driver deactivated successfully'
+      };
+      
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Manager management methods (Admin only)
+  createManager = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const currentUser = (req as any).user;
+      const { email, password, firstName, lastName, phone } = req.body;
+
+      // Only admins can create managers
+      if (currentUser.role !== UserRole.ADMIN) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only admins can create managers'
+        });
+      }
+
+      // Check if user already exists
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'User with this email already exists'
+        });
+      }
+
+      // Create new manager
+      const manager = new User({
+        email,
+        password,
+        firstName,
+        lastName,
+        phone,
+        role: UserRole.MANAGER,
+        managerId: currentUser._id, // Admin is the manager of managers
+        companyId: currentUser.companyId,
+        isActive: true
+      });
+
+      await manager.save();
+      
+      const response: ApiResponse<IUser> = {
+        success: true,
+        data: manager,
+        message: 'Manager created successfully'
+      };
+      
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateManager = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const currentUser = (req as any).user;
+      const { firstName, lastName, phone, isActive } = req.body;
+
+
+      // Only admins can update managers
+      if (currentUser.role !== UserRole.ADMIN) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only admins can update managers'
+        });
+      }
+
+      const manager = await User.findOne({ 
+        _id: id,
+        role: UserRole.MANAGER,
+        companyId: currentUser.companyId
+      });
+
+      if (!manager) {
+        return res.status(404).json({
+          success: false,
+          message: 'Manager not found'
+        });
+      }
+
+      // Update fields
+      if (firstName) manager.firstName = firstName;
+      if (lastName) manager.lastName = lastName;
+      if (phone !== undefined) manager.phone = phone;
+      if (isActive !== undefined) manager.isActive = isActive;
+
+      await manager.save();
+      
+      const response: ApiResponse<IUser> = {
+        success: true,
+        data: manager,
+        message: 'Manager updated successfully'
+      };
+      
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteManager = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const currentUser = (req as any).user;
+
+      // Only admins can delete managers
+      if (currentUser.role !== UserRole.ADMIN) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only admins can delete managers'
+        });
+      }
+
+      const manager = await User.findOne({ 
+        _id: id,
+        role: UserRole.MANAGER,
+        companyId: currentUser.companyId
+      });
+
+      if (!manager) {
+        return res.status(404).json({
+          success: false,
+          message: 'Manager not found'
+        });
+      }
+
+      // Check if manager has assigned drivers
+      const assignedDrivers = await User.countDocuments({ 
+        managerId: id,
+        isActive: true 
+      });
+
+      if (assignedDrivers > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete manager with assigned drivers. Please reassign drivers first.'
+        });
+      }
+
+      // Soft delete
+      manager.isActive = false;
+      await manager.save();
+      
+      const response: ApiResponse<null> = {
+        success: true,
+        data: null,
+        message: 'Manager deactivated successfully'
       };
       
       res.json(response);

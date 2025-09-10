@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { toast } from 'react-hot-toast';
+import { useNotification } from '../contexts/NotificationContext';
 import { Car } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -8,21 +8,22 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const { showSuccess, showError } = useNotification();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!email || !password) {
-      toast.error('Please fill in all fields');
+      showError('Validation Error', 'Please fill in all fields');
       return;
     }
 
     try {
       setIsLoading(true);
       await login(email, password);
-      toast.success('Login successful!');
+      showSuccess('Success!', 'Login successful!');
     } catch (error) {
-      toast.error('Login failed. Please check your credentials.');
+      showError('Login Failed', 'Please check your credentials and try again.');
     } finally {
       setIsLoading(false);
     }

@@ -6,13 +6,10 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { authRoutes } from './routes/auth';
-import { userRoutes } from './routes/users';
 import { vehicleRoutes } from './routes/vehicles';
 import { driverRoutes } from './routes/drivers';
-import { tripRoutes } from './routes/trips';
-import { maintenanceRoutes } from './routes/maintenance';
-import { fuelRoutes } from './routes/fuel';
 import { dashboardRoutes } from './routes/dashboard';
+import { vehicleDataRoutes } from './routes/vehicleData';
 import { locationRoutes } from './routes/location';
 import { connectDatabase } from './config/database';
 
@@ -47,13 +44,10 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/drivers', driverRoutes);
-app.use('/api/trips', tripRoutes);
-app.use('/api/maintenance', maintenanceRoutes);
-app.use('/api/fuel', fuelRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/vehicle-data', vehicleDataRoutes);
 app.use('/api/location', locationRoutes);
 
 // Error handling middleware

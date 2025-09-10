@@ -1,49 +1,81 @@
 import { Request, Response, NextFunction } from 'express';
-import { body } from 'express-validator';
-import { validateRequest } from '../middleware/validation';
-import { createError } from '../middleware/errorHandler';
+import { Vehicle, IVehicle } from '../models/Vehicle';
+import { User, UserRole } from '../models/User';
 import { ApiResponse } from '@fleet-management/shared';
-
-interface Vehicle {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  licensePlate: string;
-  vin: string;
-  status: 'ACTIVE' | 'MAINTENANCE' | 'OUT_OF_SERVICE';
-  fuelType: 'GASOLINE' | 'DIESEL' | 'ELECTRIC' | 'HYBRID';
-  fuelCapacity: number;
-  mileage: number;
-  lastMaintenance: string;
-  driverId?: string;
-}
-
-// Mock vehicle database
-const vehicles: Vehicle[] = [
-  {
-    id: '1',
-    make: 'Ford',
-    model: 'Transit',
-    year: 2022,
-    licensePlate: 'ABC123',
-    vin: '1HGBH41JXMN109186',
-    status: 'ACTIVE',
-    fuelType: 'GASOLINE',
-    fuelCapacity: 80,
-    mileage: 15000,
-    lastMaintenance: '2024-01-15',
-    driverId: '1'
-  }
-];
 
 export class VehicleController {
   
   getAllVehicles = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const response: ApiResponse<Vehicle[]> = {
+      const currentUser = (req as any).user;
+      let vehicles: IVehicle[];
+
+      switch (currentUser.role) {
+        case UserRole.ADMIN:
+          // Admin can see all vehicles in their company
+          vehicles = await Vehicle.find({ 
+            companyId: currentUser.companyId
+          }).populate('driverId', 'firstName lastName email');
+          break;
+
+        case UserRole.MANAGER:
+          // Manager can see all vehicles in their company
+          vehicles = await Vehicle.find({ 
+            companyId: currentUser.companyId
+          }).populate('driverId', 'firstName lastName email');
+          break;
+
+        case UserRole.DRIVER:
+          // Driver can only see their assigned vehicle
+          vehicles = await Vehicle.find({ 
+            driverId: currentUser._id,
+            companyId: currentUser.companyId
+          }).populate('driverId', 'firstName lastName email');
+          break;
+
+        default:
+          return res.status(403).json({
+            success: false,
+            message: 'Insufficient permissions'
+          });
+      }
+
+      // Add dynamic status to each vehicle and update database if needed
+      const vehiclesWithDynamicStatus = await Promise.all(vehicles.map(async (vehicle) => {
+        const vehicleObj = vehicle.toObject();
+        const today = new Date();
+        const serviceDate = new Date(vehicle.nextServiceDate);
+        const daysUntilService = Math.ceil((serviceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // Calculate dynamic status
+        let dynamicStatus = vehicle.status;
+        if (daysUntilService < 0) {
+          dynamicStatus = 'maintenance'; // Overdue
+        } else if (daysUntilService <= 10) {
+          dynamicStatus = 'maintenance'; // Due within 10 days
+        } else {
+          // If more than 10 days away and currently marked as maintenance, reset to active
+          if (vehicle.status === 'maintenance') {
+            dynamicStatus = 'active';
+          }
+        }
+        
+        // Update database status if it differs from calculated status
+        if (vehicle.status !== dynamicStatus) {
+          console.log(`Updating vehicle ${vehicle.licensePlate} status from ${vehicle.status} to ${dynamicStatus}`);
+          await Vehicle.findByIdAndUpdate(vehicle._id, { status: dynamicStatus });
+        }
+        
+        return {
+          ...vehicleObj,
+          status: dynamicStatus,
+          daysUntilService: daysUntilService
+        };
+      }));
+
+      const response: ApiResponse<any[]> = {
         success: true,
-        data: vehicles,
+        data: vehiclesWithDynamicStatus,
         message: 'Vehicles retrieved successfully'
       };
       
@@ -52,18 +84,33 @@ export class VehicleController {
       next(error);
     }
   };
-  
+
   getVehicleById = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const vehicle = vehicles.find(v => v.id === id);
-      
+      const currentUser = (req as any).user;
+
+      const vehicle = await Vehicle.findOne({ 
+        _id: id,
+        companyId: currentUser.companyId
+      }).populate('driverId', 'firstName lastName email');
+
       if (!vehicle) {
-        const error = createError('Vehicle not found', 404);
-        return next(error);
+        return res.status(404).json({
+          success: false,
+          message: 'Vehicle not found'
+        });
+      }
+
+      // Check permissions for drivers
+      if (currentUser.role === UserRole.DRIVER && vehicle.driverId?._id.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Can only view your assigned vehicle'
+        });
       }
       
-      const response: ApiResponse<Vehicle> = {
+      const response: ApiResponse<IVehicle> = {
         success: true,
         data: vehicle,
         message: 'Vehicle retrieved successfully'
@@ -74,21 +121,69 @@ export class VehicleController {
       next(error);
     }
   };
-  
+
   createVehicle = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const newVehicle: Vehicle = {
-        id: Date.now().toString(),
-        ...req.body,
-        status: 'ACTIVE',
-        mileage: req.body.mileage || 0
-      };
+      const currentUser = (req as any).user;
+      const { licensePlate, make, model, year, vin, nextServiceDate, odometer, driverId } = req.body;
+      const vehicleModel = model; // Map model to vehicleModel for database
+
+      // Check permissions
+      if (currentUser.role === UserRole.DRIVER) {
+        return res.status(403).json({
+          success: false,
+          message: 'Drivers cannot create vehicles'
+        });
+      }
+
+      // Validate driver assignment if provided
+      if (driverId) {
+        const driver = await User.findOne({ 
+          _id: driverId, 
+          role: UserRole.DRIVER,
+          companyId: currentUser.companyId,
+          isActive: true 
+        });
+        
+        if (!driver) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid driver assignment'
+          });
+        }
+
+        // Check if driver is already assigned to another vehicle
+        const existingAssignment = await Vehicle.findOne({ 
+          driverId: driverId,
+          status: 'active'
+        });
+        
+        if (existingAssignment) {
+          return res.status(400).json({
+            success: false,
+            message: 'Driver is already assigned to another vehicle'
+          });
+        }
+      }
+
+      // Create new vehicle
+      const vehicle = new Vehicle({
+        licensePlate,
+        make,
+        vehicleModel,
+        year,
+        vin,
+        nextServiceDate,
+        odometer,
+        driverId: driverId || undefined,
+        companyId: currentUser.companyId
+      });
+
+      await vehicle.save();
       
-      vehicles.push(newVehicle);
-      
-      const response: ApiResponse<Vehicle> = {
+      const response: ApiResponse<IVehicle> = {
         success: true,
-        data: newVehicle,
+        data: vehicle,
         message: 'Vehicle created successfully'
       };
       
@@ -97,23 +192,94 @@ export class VehicleController {
       next(error);
     }
   };
-  
+
   updateVehicle = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const vehicleIndex = vehicles.findIndex(v => v.id === id);
+      const currentUser = (req as any).user;
+      const { licensePlate, make, model, year, vin, nextServiceDate, odometer, status, driverId } = req.body;
+      const vehicleModel = model; // Map model to vehicleModel for database
       
-      if (vehicleIndex === -1) {
-        const error = createError('Vehicle not found', 404);
-        return next(error);
+
+      const vehicle = await Vehicle.findOne({ 
+        _id: id,
+        companyId: currentUser.companyId
+      });
+
+      if (!vehicle) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vehicle not found'
+        });
       }
+
+      // Check permissions for drivers
+      if (currentUser.role === UserRole.DRIVER) {
+        // Drivers can only update odometer
+        if (odometer !== undefined) {
+          vehicle.odometer = odometer;
+        } else {
+          return res.status(403).json({
+            success: false,
+            message: 'Drivers can only update odometer reading'
+          });
+        }
+      } else {
+        // Managers and Admins can update most fields
+        if (licensePlate) vehicle.licensePlate = licensePlate;
+        if (make) vehicle.make = make;
+        if (vehicleModel) vehicle.vehicleModel = vehicleModel;
+        if (year) vehicle.year = year;
+        if (vin) vehicle.vin = vin;
+        if (nextServiceDate) vehicle.nextServiceDate = nextServiceDate;
+        if (odometer !== undefined) vehicle.odometer = odometer;
+        if (status) vehicle.status = status;
+
+        // Handle driver assignment
+        if (driverId !== undefined) {
+          if (driverId) {
+            // Assign driver
+            const driver = await User.findOne({ 
+              _id: driverId, 
+              role: UserRole.DRIVER,
+              companyId: currentUser.companyId,
+              isActive: true 
+            });
+            
+            if (!driver) {
+              return res.status(400).json({
+                success: false,
+                message: 'Invalid driver assignment'
+              });
+            }
+
+            // Check if driver is already assigned to another vehicle
+            const existingAssignment = await Vehicle.findOne({ 
+              driverId: driverId,
+              status: 'active',
+              _id: { $ne: id }
+            });
+            
+            if (existingAssignment) {
+              return res.status(400).json({
+                success: false,
+                message: 'Driver is already assigned to another vehicle'
+              });
+            }
+
+            vehicle.driverId = driverId;
+          } else {
+            // Unassign driver
+            vehicle.driverId = undefined;
+          }
+        }
+      }
+
+      await vehicle.save();
       
-      const updatedVehicle = { ...vehicles[vehicleIndex], ...req.body };
-      vehicles[vehicleIndex] = updatedVehicle;
-      
-      const response: ApiResponse<Vehicle> = {
+      const response: ApiResponse<IVehicle> = {
         success: true,
-        data: updatedVehicle,
+        data: vehicle,
         message: 'Vehicle updated successfully'
       };
       
@@ -122,23 +288,41 @@ export class VehicleController {
       next(error);
     }
   };
-  
+
   deleteVehicle = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const vehicleIndex = vehicles.findIndex(v => v.id === id);
-      
-      if (vehicleIndex === -1) {
-        const error = createError('Vehicle not found', 404);
-        return next(error);
+      const currentUser = (req as any).user;
+
+      // Check permissions
+      if (currentUser.role === UserRole.DRIVER) {
+        return res.status(403).json({
+          success: false,
+          message: 'Drivers cannot delete vehicles'
+        });
       }
-      
-      vehicles.splice(vehicleIndex, 1);
+
+      const vehicle = await Vehicle.findOne({ 
+        _id: id,
+        companyId: currentUser.companyId
+      });
+
+      if (!vehicle) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vehicle not found'
+        });
+      }
+
+      // Soft delete by changing status
+      vehicle.status = 'out_of_service';
+      vehicle.driverId = undefined; // Unassign driver
+      await vehicle.save();
       
       const response: ApiResponse<null> = {
         success: true,
         data: null,
-        message: 'Vehicle deleted successfully'
+        message: 'Vehicle deactivated successfully'
       };
       
       res.json(response);
@@ -146,32 +330,32 @@ export class VehicleController {
       next(error);
     }
   };
-  
-  getVehicleMaintenance = async (req: Request, res: Response, next: NextFunction) => {
+
+  // Get available drivers for assignment
+  getAvailableDrivers = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { id } = req.params;
-      const vehicle = vehicles.find(v => v.id === id);
-      
-      if (!vehicle) {
-        const error = createError('Vehicle not found', 404);
-        return next(error);
+      const currentUser = (req as any).user;
+
+      // Check permissions
+      if (currentUser.role === UserRole.DRIVER) {
+        return res.status(403).json({
+          success: false,
+          message: 'Drivers cannot view driver assignments'
+        });
       }
-      
-      // Mock maintenance data
-      const maintenance = [
-        {
-          id: '1',
-          type: 'OIL_CHANGE',
-          description: 'Regular oil change',
-          date: '2024-01-15',
-          cost: 45.00
-        }
-      ];
-      
+
+      // For editing purposes, we need to show ALL drivers, not just unassigned ones
+      // The frontend will handle showing which ones are available for new assignments
+      const allDrivers = await User.find({
+        role: UserRole.DRIVER,
+        companyId: currentUser.companyId,
+        isActive: true
+      }).select('firstName lastName email _id');
+
       const response: ApiResponse<any> = {
         success: true,
-        data: maintenance,
-        message: 'Vehicle maintenance history retrieved'
+        data: allDrivers,
+        message: 'Drivers retrieved successfully'
       };
       
       res.json(response);
@@ -179,65 +363,44 @@ export class VehicleController {
       next(error);
     }
   };
-  
-  getVehicleTrips = async (req: Request, res: Response, next: NextFunction) => {
+
+  /**
+   * Mark service as done - extends service date by 1 year
+   */
+  public markServiceDone = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
-      const vehicle = vehicles.find(v => v.id === id);
-      
+      const currentUser = (req as any).user;
+
+      const vehicle = await Vehicle.findOne({ 
+        _id: id,
+        companyId: currentUser.companyId
+      });
+
       if (!vehicle) {
-        const error = createError('Vehicle not found', 404);
-        return next(error);
+        res.status(404).json({
+          success: false,
+          message: 'Vehicle not found'
+        });
+        return;
       }
-      
-      // Mock trip data
-      const trips = [
-        {
-          id: '1',
-          startLocation: 'NYC',
-          endLocation: 'Boston',
-          startTime: '2024-01-20T08:00:00Z',
-          status: 'COMPLETED'
-        }
-      ];
-      
+
+      // Extend service date by 1 year from current date
+      const newServiceDate = new Date();
+      newServiceDate.setFullYear(newServiceDate.getFullYear() + 1);
+
+      vehicle.nextServiceDate = newServiceDate;
+      vehicle.status = 'active'; // Mark as active since service is done
+      await vehicle.save();
+
       const response: ApiResponse<any> = {
         success: true,
-        data: trips,
-        message: 'Vehicle trip history retrieved'
-      };
-      
-      res.json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-  
-  getVehicleFuelRecords = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const vehicle = vehicles.find(v => v.id === id);
-      
-      if (!vehicle) {
-        const error = createError('Vehicle not found', 404);
-        return next(error);
-      }
-      
-      // Mock fuel data
-      const fuelRecords = [
-        {
-          id: '1',
-          amount: 45.5,
-          cost: 68.25,
-          date: '2024-01-19',
-          fuelType: 'GASOLINE'
-        }
-      ];
-      
-      const response: ApiResponse<any> = {
-        success: true,
-        data: fuelRecords,
-        message: 'Vehicle fuel records retrieved'
+        data: {
+          id: vehicle._id,
+          nextServiceDate: vehicle.nextServiceDate,
+          status: vehicle.status
+        },
+        message: 'Service marked as done successfully. Next service due in 1 year.'
       };
       
       res.json(response);

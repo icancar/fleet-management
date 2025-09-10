@@ -1,6 +1,6 @@
 import { LocationLog, ILocationLog } from '../models/LocationLog';
 import { Device, IDevice } from '../models/Device';
-import { DailyRoute } from '@fleet-management/shared';
+// import { DailyRoute } from '@fleet-management/shared';
 
 export class LocationDatabaseService {
   
@@ -68,60 +68,77 @@ export class LocationDatabaseService {
   /**
    * Get device daily routes from MongoDB
    */
-  static async getDeviceDailyRoutes(deviceId: string, date: string): Promise<DailyRoute[]> {
+  static async getDeviceDailyRoutes(deviceId: string, date?: string): Promise<any[]> {
     try {
-      const startDate = new Date(date);
-      const endDate = new Date(date);
-      endDate.setDate(endDate.getDate() + 1);
-
-      const locations = await LocationLog.find({
-        deviceId,
-        timestamp: {
+      let query: any = { deviceId };
+      
+      if (date) {
+        const startDate = new Date(date);
+        const endDate = new Date(date);
+        endDate.setDate(endDate.getDate() + 1);
+        
+        query.timestamp = {
           $gte: startDate,
           $lt: endDate
-        }
-      }).sort({ timestamp: 1 });
+        };
+      }
+
+      const locations = await LocationLog.find(query).sort({ timestamp: 1 });
 
       if (locations.length === 0) {
         return [];
       }
 
-      // Group locations by day and calculate route statistics
-      const routePoints = locations.map(loc => ({
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        timestamp: loc.timestamp.toISOString(),
-        speed: loc.speed,
-        accuracy: loc.accuracy
-      }));
+      // Group locations by day
+      const dailyRoutesMap = new Map<string, any[]>();
+      locations.forEach(loc => {
+        const day = loc.timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+        if (!dailyRoutesMap.has(day)) {
+          dailyRoutesMap.set(day, []);
+        }
+        dailyRoutesMap.get(day)!.push(loc);
+      });
 
-      const totalDistance = this.calculateTotalDistance(routePoints);
-      const totalDuration = this.calculateTotalDuration(routePoints);
-      const averageSpeed = this.calculateAverageSpeed(routePoints);
-      const maxSpeed = Math.max(...routePoints.map(p => p.speed || 0));
+      const dailyRoutes: any[] = [];
+      for (const [day, dayLocations] of dailyRoutesMap.entries()) {
+        const routePoints = dayLocations.map(loc => ({
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          timestamp: loc.timestamp.toISOString(),
+          speed: loc.speed,
+          accuracy: loc.accuracy
+        }));
 
-      const dailyRoute: DailyRoute = {
-        date,
-        deviceId,
-        totalPoints: routePoints.length,
-        totalDistance,
-        totalDuration,
-        averageSpeed,
-        maxSpeed,
-        startLocation: {
-          latitude: routePoints[0].latitude,
-          longitude: routePoints[0].longitude,
-          timestamp: routePoints[0].timestamp
-        },
-        endLocation: {
-          latitude: routePoints[routePoints.length - 1].latitude,
-          longitude: routePoints[routePoints.length - 1].longitude,
-          timestamp: routePoints[routePoints.length - 1].timestamp
-        },
-        routePoints
-      };
+        const totalDistance = this.calculateTotalDistance(routePoints);
+        const totalDuration = this.calculateTotalDuration(routePoints);
+        const averageSpeed = this.calculateAverageSpeed(routePoints);
+        const maxSpeed = Math.max(...routePoints.map(p => p.speed || 0));
 
-      return [dailyRoute];
+        const dailyRoute: any = {
+          date: day,
+          deviceId,
+          totalPoints: routePoints.length,
+          totalDistance,
+          totalDuration,
+          averageSpeed,
+          maxSpeed,
+          startLocation: {
+            latitude: routePoints[0].latitude,
+            longitude: routePoints[0].longitude,
+            timestamp: routePoints[0].timestamp
+          },
+          endLocation: {
+            latitude: routePoints[routePoints.length - 1].latitude,
+            longitude: routePoints[routePoints.length - 1].longitude,
+            timestamp: routePoints[routePoints.length - 1].timestamp
+          },
+          routePoints
+        };
+
+        dailyRoutes.push(dailyRoute);
+      }
+
+      return dailyRoutes;
 
     } catch (error) {
       console.error('❌ Error getting device daily routes:', error);
@@ -159,7 +176,7 @@ export class LocationDatabaseService {
         deviceId: device.deviceId,
         deviceFingerprint: device.deviceFingerprint,
         manufacturer: device.manufacturer,
-        model: device.model,
+        model: device.deviceModel,
         androidVersion: device.androidVersion,
         firstSeen: device.firstSeen,
         lastSeen: device.lastSeen,

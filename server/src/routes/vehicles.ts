@@ -1,78 +1,62 @@
 import { Router } from 'express';
-import { body, param, query } from 'express-validator';
+import { body } from 'express-validator';
 import { validateRequest } from '../middleware/validation';
+import { authenticateToken, requireManager, requireAdmin } from '../middleware/auth';
 import { VehicleController } from '../controllers/VehicleController';
 
 const router = Router();
 const vehicleController = new VehicleController();
 
-// Validation middleware
 const validateVehicle = [
-  body('licensePlate').trim().isLength({ min: 1 }).withMessage('License plate is required'),
-  body('make').trim().isLength({ min: 1 }).withMessage('Make is required'),
-  body('model').trim().isLength({ min: 1 }).withMessage('Model is required'),
-  body('year').isInt({ min: 1900, max: new Date().getFullYear() + 1 }).withMessage('Invalid year'),
-  body('vin').trim().isLength({ min: 17, max: 17 }).withMessage('VIN must be 17 characters'),
-  body('fuelType').isIn(['gasoline', 'diesel', 'electric', 'hybrid', 'plugin_hybrid']).withMessage('Invalid fuel type'),
-  body('status').isIn(['active', 'maintenance', 'out_of_service', 'retired']).withMessage('Invalid status'),
-  body('currentMileage').isFloat({ min: 0 }).withMessage('Current mileage must be positive'),
+  body('licensePlate').isLength({ min: 2 }).withMessage('License plate is required'),
+  body('make').isLength({ min: 2 }).withMessage('Make is required'),
+  body('model').isLength({ min: 2 }).withMessage('Model is required'),
+  body('year').isInt({ min: 1900, max: new Date().getFullYear() + 1 }).withMessage('Valid year is required'),
+  body('vin').isLength({ min: 17, max: 17 }).withMessage('VIN must be 17 characters'),
+  body('nextServiceDate').isISO8601().withMessage('Valid service date is required'),
+  body('odometer').isInt({ min: 0 }).withMessage('Odometer must be a positive number'),
+  body('driverId').optional().isMongoId().withMessage('Valid driver ID is required'),
   validateRequest
 ];
 
-const validatePagination = [
-  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
-  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
-  query('sortBy').optional().isIn(['licensePlate', 'make', 'model', 'year', 'status', 'currentMileage', 'createdAt']).withMessage('Invalid sort field'),
-  query('sortOrder').optional().isIn(['asc', 'desc']).withMessage('Sort order must be asc or desc'),
+const validateVehicleUpdate = [
+  body('licensePlate').optional().isLength({ min: 2 }).withMessage('License plate must be at least 2 characters'),
+  body('make').optional().isLength({ min: 2 }).withMessage('Make must be at least 2 characters'),
+  body('model').optional().isLength({ min: 2 }).withMessage('Model must be at least 2 characters'),
+  body('year').optional().isInt({ min: 1900, max: new Date().getFullYear() + 1 }).withMessage('Valid year is required'),
+  body('vin').optional().isLength({ min: 17, max: 17 }).withMessage('VIN must be 17 characters'),
+  body('nextServiceDate').optional().isISO8601().withMessage('Valid service date is required'),
+  body('odometer').optional().isInt({ min: 0 }).withMessage('Odometer must be a positive number'),
+  body('status').optional().isIn(['active', 'maintenance', 'out_of_service']).withMessage('Invalid status'),
+  body('driverId').optional().custom((value) => {
+    if (value === '' || value === null || value === undefined) return true;
+    return /^[0-9a-fA-F]{24}$/.test(value);
+  }).withMessage('Valid driver ID is required'),
   validateRequest
 ];
 
-// GET /api/vehicles - Get all vehicles with pagination and filtering
-router.get('/', validatePagination, vehicleController.getAllVehicles);
+// All routes require authentication
+router.use(authenticateToken);
 
-// GET /api/vehicles/:id - Get vehicle by ID
-router.get('/:id', 
-  param('id').isUUID().withMessage('Invalid vehicle ID'),
-  validateRequest,
-  vehicleController.getVehicleById
-);
+// Get all vehicles (role-based access)
+router.get('/', vehicleController.getAllVehicles);
 
-// POST /api/vehicles - Create new vehicle
-router.post('/', validateVehicle, vehicleController.createVehicle);
+// Get available drivers for assignment
+router.get('/available-drivers', vehicleController.getAvailableDrivers);
 
-// PUT /api/vehicles/:id - Update vehicle
-router.put('/:id',
-  param('id').isUUID().withMessage('Invalid vehicle ID'),
-  ...validateVehicle,
-  vehicleController.updateVehicle
-);
+// Get vehicle by ID
+router.get('/:id', vehicleController.getVehicleById);
 
-// DELETE /api/vehicles/:id - Delete vehicle
-router.delete('/:id',
-  param('id').isUUID().withMessage('Invalid vehicle ID'),
-  validateRequest,
-  vehicleController.deleteVehicle
-);
+// Create new vehicle (Manager or Admin only)
+router.post('/', requireManager, validateVehicle, vehicleController.createVehicle);
 
-// GET /api/vehicles/:id/maintenance - Get maintenance history for vehicle
-router.get('/:id/maintenance',
-  param('id').isUUID().withMessage('Invalid vehicle ID'),
-  validatePagination,
-  vehicleController.getVehicleMaintenance
-);
+// Update vehicle
+router.put('/:id', validateVehicleUpdate, vehicleController.updateVehicle);
 
-// GET /api/vehicles/:id/trips - Get trip history for vehicle
-router.get('/:id/trips',
-  param('id').isUUID().withMessage('Invalid vehicle ID'),
-  validatePagination,
-  vehicleController.getVehicleTrips
-);
+// Mark service as done (extends service date by 1 year)
+router.patch('/:id/service-done', requireManager, vehicleController.markServiceDone);
 
-// GET /api/vehicles/:id/fuel - Get fuel records for vehicle
-router.get('/:id/fuel',
-  param('id').isUUID().withMessage('Invalid vehicle ID'),
-  validatePagination,
-  vehicleController.getVehicleFuelRecords
-);
+// Delete vehicle (soft delete)
+router.delete('/:id', requireManager, vehicleController.deleteVehicle);
 
 export { router as vehicleRoutes };

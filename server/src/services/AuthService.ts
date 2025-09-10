@@ -1,7 +1,11 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
 import { User, UserRole, IUser } from '../models/User';
 import { Company, ICompany } from '../models/Company';
+
+// Load environment variables
+dotenv.config();
 
 export interface LoginCredentials {
   email: string;
@@ -77,8 +81,8 @@ export class AuthService {
    */
   static async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      // Find user by email
-      const user = await User.findOne({ email: credentials.email });
+      // Find user by email (include password field)
+      const user = await User.findOne({ email: credentials.email }).select('+password');
       if (!user) {
         throw new Error('Invalid email or password');
       }
@@ -155,7 +159,7 @@ export class AuthService {
       const user = new User({
         ...ownerData,
         password: hashedPassword,
-        role: UserRole.COMPANY_OWNER,
+        role: UserRole.ADMIN,
         companyId: (company._id as any).toString()
       });
 

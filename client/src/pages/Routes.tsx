@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { DailyRoute, RouteStats } from '@fleet-management/shared';
-import { formatDistance, formatDuration, formatSpeed, formatDate } from '@fleet-management/shared';
+import { DailyRoute, RouteStats } from '../types/routes';
+import { formatDistance, formatDuration, formatSpeed, formatDate } from '../utils/formatUtils';
 import { cn } from '../utils/cn';
 
 const Routes: React.FC = () => {

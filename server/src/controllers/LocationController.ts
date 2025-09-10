@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { LocationService } from '../services/LocationService';
 import { LocationDatabaseService } from '../services/LocationDatabaseService';
 import { createError } from '../middleware/errorHandler';
 import { ApiResponse } from '@fleet-management/shared';
@@ -7,11 +6,6 @@ import { UserRole } from '../models/User';
 import { Device } from '../models/Device';
 
 export class LocationController {
-  private locationService: LocationService;
-
-  constructor() {
-    this.locationService = new LocationService();
-  }
 
   receiveLocation = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -45,18 +39,12 @@ export class LocationController {
 
   getLocationHistory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page = 1, limit = 50 } = req.query;
-      
-      const paginationParams = {
-        page: Number(page),
-        limit: Number(limit)
-      };
-
-      const locations = await this.locationService.getLocationHistory(paginationParams);
-      
+      // This method is not implemented in LocationDatabaseService yet
+      // For now, return empty data
       const response: ApiResponse<any> = {
         success: true,
-        data: locations
+        data: [],
+        message: 'Location history not implemented yet'
       };
 
       res.json(response);
@@ -67,19 +55,12 @@ export class LocationController {
 
   getDeviceLocationHistory = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { deviceId } = req.params;
-      const { page = 1, limit = 50 } = req.query;
-      
-      const paginationParams = {
-        page: Number(page),
-        limit: Number(limit)
-      };
-
-      const locations = await this.locationService.getDeviceLocationHistory(deviceId, paginationParams);
-      
+      // This method is not implemented in LocationDatabaseService yet
+      // For now, return empty data
       const response: ApiResponse<any> = {
         success: true,
-        data: locations
+        data: [],
+        message: 'Device location history not implemented yet'
       };
 
       res.json(response);
@@ -113,7 +94,16 @@ export class LocationController {
     try {
       const { date } = req.query;
       
-      const routes = await this.locationService.getAllDailyRoutes(date as string);
+      // Get all devices first, then get routes for each
+      const devices = await LocationDatabaseService.getAllDevices();
+      const allRoutes = [];
+      
+      for (const device of devices) {
+        const deviceRoutes = await LocationDatabaseService.getDeviceDailyRoutes(device.deviceId, date as string);
+        allRoutes.push(...deviceRoutes);
+      }
+      
+      const routes = allRoutes;
       
       const response: ApiResponse<any> = {
         success: true,
@@ -138,7 +128,7 @@ export class LocationController {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - numDays);
       
-      const routes = await this.locationService.getDeviceDailyRoutes(deviceId);
+      const routes = await LocationDatabaseService.getDeviceDailyRoutes(deviceId);
       const recentRoutes = routes.filter(route => {
         const routeDate = new Date(route.date);
         return routeDate >= startDate && routeDate <= endDate;
@@ -237,7 +227,7 @@ export class LocationController {
 
       // Determine which devices the user can access
       switch (currentUser.role) {
-        case UserRole.COMPANY_OWNER:
+        case UserRole.ADMIN:
           // Company owner can see all devices in their company
           const companyDevices = await Device.find({ 
             companyId: currentUser.companyId,

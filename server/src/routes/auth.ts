@@ -46,6 +46,7 @@ router.post('/login', validateLogin, authController.login);
 router.post('/create-company', validateCompanyOwner, authController.createCompanyWithOwner);
 
 // Protected routes
+router.get('/me', authenticateToken, authController.getMe);
 router.get('/profile', authenticateToken, authController.getProfile);
 router.put('/profile', authenticateToken, authController.updateProfile);
 router.put('/change-password', authenticateToken, validatePasswordChange, authController.changePassword);

@@ -15,20 +15,23 @@ export class UserController {
       let users: IUser[];
 
       switch (currentUser.role) {
-        case UserRole.COMPANY_OWNER:
-          // Company owner can see all users in their company
+        case UserRole.ADMIN:
+          // Admin can see all users in their company
           users = await User.find({ 
             companyId: currentUser.companyId,
             isActive: true 
-          }).select('-password');
+          }).select('-password').populate('managerId', 'firstName lastName email role');
           break;
 
         case UserRole.MANAGER:
-          // Manager can see their assigned drivers
-          users = await User.find({ 
+          // Manager can see their assigned drivers and themselves
+          const managerDrivers = await User.find({ 
             managerId: currentUser._id,
             isActive: true 
-          }).select('-password');
+          }).select('-password').populate('managerId', 'firstName lastName email role');
+          
+          const managerSelf = await User.findById(currentUser._id).select('-password').populate('managerId', 'firstName lastName email role');
+          users = managerSelf ? [managerSelf, ...managerDrivers] : managerDrivers;
           break;
 
         default:

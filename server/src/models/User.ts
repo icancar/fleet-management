@@ -1,9 +1,9 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export enum UserRole {
-  DRIVER = 'driver',
+  ADMIN = 'admin',
   MANAGER = 'manager',
-  COMPANY_OWNER = 'company_owner'
+  DRIVER = 'driver'
 }
 
 export interface IUser extends Document {
@@ -16,7 +16,7 @@ export interface IUser extends Document {
   phone?: string;
   avatar?: string;
   companyId?: string;
-  managerId?: string; // For drivers - which manager manages them
+  managerId?: mongoose.Types.ObjectId; // For managers and drivers - who manages them
   createdAt: Date;
   updatedAt: Date;
   lastLogin?: Date;
@@ -64,12 +64,35 @@ const UserSchema = new Schema<IUser>({
   },
   companyId: {
     type: String,
-    required: true
+    required: function(this: IUser) {
+      // Company ID is required for all roles
+      return true;
+    }
   },
   managerId: {
-    type: String,
+    type: Schema.Types.ObjectId,
+    ref: 'User',
     required: function() {
-      return this.role === UserRole.DRIVER;
+      // Managers and drivers need a manager (admin for managers, manager for drivers)
+      return this.role === UserRole.MANAGER || this.role === UserRole.DRIVER;
+    },
+    validate: {
+      validator: async function(managerId: mongoose.Types.ObjectId) {
+        if (!managerId) return true; // Let required handle this
+        const manager = await mongoose.model('User').findById(managerId);
+        if (!manager) return false;
+        
+        // If this user is a manager, their manager must be admin
+        if (this.role === UserRole.MANAGER) {
+          return manager.role === UserRole.ADMIN;
+        }
+        // If this user is a driver, their manager must be a manager
+        if (this.role === UserRole.DRIVER) {
+          return manager.role === UserRole.MANAGER;
+        }
+        return false;
+      },
+      message: 'Invalid manager assignment: Managers must report to Admin, Drivers must report to Manager'
     }
   },
   lastLogin: {

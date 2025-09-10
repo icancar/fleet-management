@@ -38,15 +38,15 @@ const LocationLogSchema = new Schema<ILocationLog>({
   },
   speed: {
     type: Number,
-    required: true
+    required: false
   },
   bearing: {
     type: Number,
-    required: true
+    required: false
   },
   altitude: {
     type: Number,
-    required: true
+    required: false
   }
 }, {
   timestamps: true
