@@ -8,16 +8,4 @@
         android:icon="@android:drawable/ic_menu_my_calendar"
         app:showAsAction="always" />
 
-    <item
-        android:id="@+id/action_today"
-        android:title="Today"
-        android:icon="@android:drawable/ic_menu_today"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/action_yesterday"
-        android:title="Yesterday"
-        android:icon="@android:drawable/ic_menu_recent_history"
-        app:showAsAction="never" />
-
 </menu>

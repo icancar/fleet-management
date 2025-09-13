@@ -92,6 +92,10 @@ class RouteMapActivity : AppCompatActivity() {
         // Set current date as default
         currentSelectedDate = getTodayDate()
         
+        // Set initial title
+        val formattedDate = displayDateFormat.format(dateFormat.parse(currentSelectedDate)!!)
+        statsText.text = "Routes for $formattedDate"
+        
         // Load route data for today by default
         loadRouteData(currentSelectedDate, preserveZoom = false)
         
@@ -161,22 +165,16 @@ class RouteMapActivity : AppCompatActivity() {
                 showDatePicker()
                 true
             }
-            R.id.action_today -> {
-                currentSelectedDate = getTodayDate()
-                loadRouteData(currentSelectedDate, preserveZoom = false)
-                true
-            }
-            R.id.action_yesterday -> {
-                currentSelectedDate = getYesterdayDate()
-                loadRouteData(currentSelectedDate, preserveZoom = false)
-                true
-            }
             else -> super.onOptionsItemSelected(item)
         }
     }
     
     private fun showDatePicker() {
-        val calendar = Calendar.getInstance()
+        // Parse the currently selected date instead of using today's date
+        val currentDate = dateFormat.parse(currentSelectedDate) ?: Date()
+        val calendar = Calendar.getInstance().apply {
+            time = currentDate
+        }
         val year = calendar.get(Calendar.YEAR)
         val month = calendar.get(Calendar.MONTH)
         val day = calendar.get(Calendar.DAY_OF_MONTH)
@@ -202,11 +200,6 @@ class RouteMapActivity : AppCompatActivity() {
         return dateFormat.format(Date())
     }
     
-    private fun getYesterdayDate(): String {
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.DAY_OF_YEAR, -1)
-        return dateFormat.format(calendar.time)
-    }
     
     private fun loadRouteData(date: String, preserveZoom: Boolean = false) {
         CoroutineScope(Dispatchers.IO).launch {
@@ -217,7 +210,7 @@ class RouteMapActivity : AppCompatActivity() {
                 // Update UI on main thread
                 withContext(Dispatchers.Main) {
                     displayRoutes(routes, date, preserveZoom)
-                    updateStats(routes)
+                    updateStats(routes, date)
                 }
                 
             } catch (e: Exception) {
@@ -240,7 +233,7 @@ class RouteMapActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     // Update only the route data in the existing map (no HTML reload)
                     updateRouteDataOnly(routes)
-                    updateStats(routes)
+                    updateStats(routes, date)
                 }
                 
             } catch (e: Exception) {
@@ -344,8 +337,59 @@ class RouteMapActivity : AppCompatActivity() {
     
     private fun displayRoutes(routes: List<DailyRoute>, date: String, preserveZoom: Boolean = false) {
         if (routes.isEmpty()) {
-            statsText.text = "No routes found for ${displayDateFormat.format(dateFormat.parse(date)!!)}"
-            webView.loadData("<html><body><h2>No routes found for this date</h2></body></html>", "text/html", "UTF-8")
+            val formattedDate = displayDateFormat.format(dateFormat.parse(date)!!)
+            statsText.text = "No routes found for $formattedDate"
+            
+            // Create centered HTML for no routes message
+            val noRoutesHTML = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body {
+                            margin: 0;
+                            padding: 0;
+                            height: 100vh;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            font-family: Arial, sans-serif;
+                            background-color: #f5f5f5;
+                        }
+                        .no-routes-container {
+                            text-align: center;
+                            padding: 40px;
+                            background-color: white;
+                            border-radius: 10px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }
+                        .no-routes-title {
+                            font-size: 24px;
+                            color: #333;
+                            margin-bottom: 10px;
+                        }
+                        .no-routes-date {
+                            font-size: 16px;
+                            color: #666;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="no-routes-container">
+                        <div class="no-routes-title">No routes found for this date</div>
+                        <div class="no-routes-date">$formattedDate</div>
+                    </div>
+                </body>
+                </html>
+            """.trimIndent()
+            
+            webView.loadData(noRoutesHTML, "text/html", "UTF-8")
+            
+            // Clear stats display
+            distanceText.text = "Distance: --"
+            durationText.text = "Duration: --"
+            speedText.text = "Points: --"
             return
         }
         
@@ -372,7 +416,7 @@ class RouteMapActivity : AppCompatActivity() {
         webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
         
         // Update statistics
-        updateStatsDisplay(totalDistance, totalDuration, totalPoints)
+        updateStatsDisplay(totalDistance, totalDuration, totalPoints, date)
     }
     
     private fun createMapHTML(routes: List<DailyRoute>, preserveZoom: Boolean = false): String {
@@ -464,20 +508,26 @@ class RouteMapActivity : AppCompatActivity() {
         """.trimIndent()
     }
     
-    private fun updateStats(routes: List<DailyRoute>) {
+    private fun updateStats(routes: List<DailyRoute>, date: String? = null) {
         if (routes.isEmpty()) return
         
         val totalDistance = routes.sumOf { it.totalDistance }
         val totalDuration = routes.sumOf { it.totalDuration }
         val totalPoints = routes.sumOf { it.totalPoints }
         
-        updateStatsDisplay(totalDistance, totalDuration, totalPoints)
+        updateStatsDisplay(totalDistance, totalDuration, totalPoints, date)
     }
     
-    private fun updateStatsDisplay(distance: Double, duration: Double, points: Int) {
+    private fun updateStatsDisplay(distance: Double, duration: Double, points: Int, date: String? = null) {
         distanceText.text = "Distance: ${formatDistance(distance)}"
         durationText.text = "Duration: ${formatDuration(duration)}"
         speedText.text = "Points: $points"
+        
+        // Update the main stats text with current date if provided
+        if (date != null) {
+            val formattedDate = displayDateFormat.format(dateFormat.parse(date)!!)
+            statsText.text = "Routes for $formattedDate"
+        }
     }
     
     private fun getDeviceIdentifier(): String {
