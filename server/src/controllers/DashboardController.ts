@@ -10,11 +10,30 @@ export class DashboardController {
       const currentUser = (req as any).user;
       const companyId = currentUser.companyId;
 
+      // Get vehicles based on user role
+      let vehicleQuery: any = { companyId };
+      
+      if (currentUser.role === UserRole.MANAGER) {
+        // Manager can only see vehicles assigned to drivers they manage
+        const managedDrivers = await User.find({
+          managerId: currentUser._id,
+          role: UserRole.DRIVER,
+          isActive: true
+        }).select('_id');
+        
+        const managedDriverIds = managedDrivers.map(driver => driver._id);
+        vehicleQuery.driverId = { $in: managedDriverIds };
+      } else if (currentUser.role === UserRole.DRIVER) {
+        // Driver can only see their assigned vehicle
+        vehicleQuery.driverId = currentUser._id;
+      }
+      // Admin sees all vehicles (no additional filtering needed)
+
       // Get total vehicles count
-      const totalVehicles = await Vehicle.countDocuments({ companyId });
+      const totalVehicles = await Vehicle.countDocuments(vehicleQuery);
       
       // Get all vehicles to calculate dynamic status
-      const allVehicles = await Vehicle.find({ companyId });
+      const allVehicles = await Vehicle.find(vehicleQuery);
       
       // Calculate dynamic status for each vehicle
       const now = new Date();
@@ -47,18 +66,28 @@ export class DashboardController {
         }
       }
 
-      // Get out of service vehicles
+      // Get out of service vehicles (filtered by role)
       const outOfServiceVehicles = await Vehicle.countDocuments({ 
-        companyId, 
+        ...vehicleQuery,
         status: 'out_of_service' 
       });
 
-      // Get total drivers count
-      const totalDrivers = await User.countDocuments({ 
+      // Get total drivers count based on user role
+      let driverQuery: any = { 
         companyId, 
         role: UserRole.DRIVER, 
         isActive: true 
-      });
+      };
+      
+      if (currentUser.role === UserRole.MANAGER) {
+        // Manager can only see drivers they manage
+        driverQuery.managerId = currentUser._id;
+      }
+      // Admin sees all drivers, Driver role doesn't need driver count
+      
+      const totalDrivers = currentUser.role === UserRole.DRIVER 
+        ? 1 // Drivers count themselves
+        : await User.countDocuments(driverQuery);
 
       // Get assigned drivers count - use updated status
       const assignedDrivers = allVehicles.filter(vehicle => {
@@ -86,14 +115,19 @@ export class DashboardController {
       
       const totalMileage = activeVehiclesWithOdometer.reduce((sum, vehicle) => sum + vehicle.odometer, 0);
 
-      // Get recent vehicles (created in last 30 days)
+      // Get recent vehicles (created in last 30 days) - filtered by role
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
-      const recentVehicles = await Vehicle.find({ 
-        companyId,
+      const recentVehicleQuery = {
+        ...vehicleQuery,
         createdAt: { $gte: thirtyDaysAgo }
-      }).populate('driverId', 'firstName lastName').sort({ createdAt: -1 }).limit(5);
+      };
+      
+      const recentVehicles = await Vehicle.find(recentVehicleQuery)
+        .populate('driverId', 'firstName lastName')
+        .sort({ createdAt: -1 })
+        .limit(5);
 
       // Get maintenance alerts (vehicles currently in maintenance status)
       const maintenanceAlerts = vehiclesInMaintenance
@@ -135,7 +169,7 @@ export class DashboardController {
         recentVehicles,
         maintenanceAlerts
       };
-
+      
       const response: ApiResponse<any> = {
         success: true,
         data: {

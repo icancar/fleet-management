@@ -208,6 +208,13 @@ export class AuthService {
   }
 
   /**
+   * Get user by email
+   */
+  static async getUserByEmail(email: string): Promise<IUser | null> {
+    return await User.findOne({ email }).select('-password');
+  }
+
+  /**
    * Update user password
    */
   static async updatePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {

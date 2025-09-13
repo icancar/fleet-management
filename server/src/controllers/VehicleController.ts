@@ -19,8 +19,19 @@ export class VehicleController {
           break;
 
         case UserRole.MANAGER:
-          // Manager can see all vehicles in their company
+          // Manager can only see vehicles assigned to drivers they manage
+          // First, get all drivers that this manager manages
+          const managedDrivers = await User.find({
+            managerId: currentUser._id,
+            role: UserRole.DRIVER,
+            isActive: true
+          }).select('_id');
+          
+          const managedDriverIds = managedDrivers.map(driver => driver._id);
+          
+          // Then get vehicles assigned to these drivers
           vehicles = await Vehicle.find({ 
+            driverId: { $in: managedDriverIds },
             companyId: currentUser.companyId
           }).populate('driverId', 'firstName lastName email');
           break;
@@ -90,15 +101,32 @@ export class VehicleController {
       const { id } = req.params;
       const currentUser = (req as any).user;
 
-      const vehicle = await Vehicle.findOne({ 
+      let vehicleQuery: any = { 
         _id: id,
         companyId: currentUser.companyId
-      }).populate('driverId', 'firstName lastName email');
+      };
+
+      // If user is a manager, ensure they can only access vehicles assigned to drivers they manage
+      if (currentUser.role === UserRole.MANAGER) {
+        // First get all drivers that this manager manages
+        const managedDrivers = await User.find({
+          managerId: currentUser._id,
+          role: UserRole.DRIVER,
+          isActive: true
+        }).select('_id');
+        
+        const managedDriverIds = managedDrivers.map(driver => driver._id);
+        vehicleQuery.driverId = { $in: managedDriverIds };
+      }
+
+      const vehicle = await Vehicle.findOne(vehicleQuery).populate('driverId', 'firstName lastName email');
 
       if (!vehicle) {
         return res.status(404).json({
           success: false,
-          message: 'Vehicle not found'
+          message: currentUser.role === UserRole.MANAGER 
+            ? 'Vehicle not found or you do not have permission to view this vehicle'
+            : 'Vehicle not found'
         });
       }
 
@@ -138,17 +166,26 @@ export class VehicleController {
 
       // Validate driver assignment if provided
       if (driverId) {
-        const driver = await User.findOne({ 
+        let driverQuery: any = { 
           _id: driverId, 
           role: UserRole.DRIVER,
           companyId: currentUser.companyId,
           isActive: true 
-        });
+        };
+
+        // If user is a manager, ensure they can only assign drivers they manage
+        if (currentUser.role === UserRole.MANAGER) {
+          driverQuery.managerId = currentUser._id;
+        }
+
+        const driver = await User.findOne(driverQuery);
         
         if (!driver) {
           return res.status(400).json({
             success: false,
-            message: 'Invalid driver assignment'
+            message: currentUser.role === UserRole.MANAGER 
+              ? 'Invalid driver assignment. You can only assign drivers you manage.'
+              : 'Invalid driver assignment'
           });
         }
 
@@ -200,16 +237,32 @@ export class VehicleController {
       const { licensePlate, make, model, year, vin, nextServiceDate, odometer, status, driverId } = req.body;
       const vehicleModel = model; // Map model to vehicleModel for database
       
-
-      const vehicle = await Vehicle.findOne({ 
+      let vehicleQuery: any = { 
         _id: id,
         companyId: currentUser.companyId
-      });
+      };
+
+      // If user is a manager, ensure they can only update vehicles assigned to drivers they manage
+      if (currentUser.role === UserRole.MANAGER) {
+        // First get all drivers that this manager manages
+        const managedDrivers = await User.find({
+          managerId: currentUser._id,
+          role: UserRole.DRIVER,
+          isActive: true
+        }).select('_id');
+        
+        const managedDriverIds = managedDrivers.map(driver => driver._id);
+        vehicleQuery.driverId = { $in: managedDriverIds };
+      }
+
+      const vehicle = await Vehicle.findOne(vehicleQuery);
 
       if (!vehicle) {
         return res.status(404).json({
           success: false,
-          message: 'Vehicle not found'
+          message: currentUser.role === UserRole.MANAGER 
+            ? 'Vehicle not found or you do not have permission to update this vehicle'
+            : 'Vehicle not found'
         });
       }
 
@@ -239,17 +292,26 @@ export class VehicleController {
         if (driverId !== undefined) {
           if (driverId) {
             // Assign driver
-            const driver = await User.findOne({ 
+            let driverQuery: any = { 
               _id: driverId, 
               role: UserRole.DRIVER,
               companyId: currentUser.companyId,
               isActive: true 
-            });
+            };
+
+            // If user is a manager, ensure they can only assign drivers they manage
+            if (currentUser.role === UserRole.MANAGER) {
+              driverQuery.managerId = currentUser._id;
+            }
+
+            const driver = await User.findOne(driverQuery);
             
             if (!driver) {
               return res.status(400).json({
                 success: false,
-                message: 'Invalid driver assignment'
+                message: currentUser.role === UserRole.MANAGER 
+                  ? 'Invalid driver assignment. You can only assign drivers you manage.'
+                  : 'Invalid driver assignment'
               });
             }
 
@@ -344,13 +406,24 @@ export class VehicleController {
         });
       }
 
-      // For editing purposes, we need to show ALL drivers, not just unassigned ones
-      // The frontend will handle showing which ones are available for new assignments
-      const allDrivers = await User.find({
-        role: UserRole.DRIVER,
-        companyId: currentUser.companyId,
-        isActive: true
-      }).select('firstName lastName email _id');
+      let allDrivers;
+
+      if (currentUser.role === UserRole.ADMIN) {
+        // Admin can see all drivers in their company
+        allDrivers = await User.find({
+          role: UserRole.DRIVER,
+          companyId: currentUser.companyId,
+          isActive: true
+        }).select('firstName lastName email _id');
+      } else if (currentUser.role === UserRole.MANAGER) {
+        // Manager can only see drivers they manage
+        allDrivers = await User.find({
+          role: UserRole.DRIVER,
+          managerId: currentUser._id,
+          companyId: currentUser.companyId,
+          isActive: true
+        }).select('firstName lastName email _id');
+      }
 
       const response: ApiResponse<any> = {
         success: true,
