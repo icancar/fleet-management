@@ -1,172 +1,193 @@
 const mongoose = require("mongoose");
-require("dotenv").config();
 
-// Vehicle schema (simplified for script)
-const vehicleSchema = new mongoose.Schema({
-  licensePlate: { type: String, required: true, unique: true },
-  make: { type: String, required: true },
-  model: { type: String, required: true },
-  year: { type: Number, required: true },
-  vin: { type: String, required: true, unique: true },
-  nextServiceDate: { type: Date, required: true },
-  odometer: { type: Number, required: true },
-  status: {
-    type: String,
-    enum: ["active", "maintenance", "out_of_service"],
-    default: "active",
-  },
-  driverId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  companyId: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
-
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  role: {
-    type: String,
-    enum: ["admin", "manager", "driver"],
-    default: "driver",
-  },
-  isActive: { type: Boolean, default: true },
-  phone: String,
-  companyId: String,
-  managerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
-
-const Vehicle = mongoose.model("Vehicle", vehicleSchema);
-const User = mongoose.model("User", userSchema);
+// Connect to MongoDB
+const MONGODB_URI =
+  process.env.MONGODB_URI || "mongodb://localhost:27017/fleet-management";
 
 async function createSampleVehicles() {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(
-      process.env.MONGODB_URI || "mongodb://localhost:27017/fleet-management"
+    await mongoose.connect(MONGODB_URI);
+    console.log("✅ Connected to MongoDB");
+
+    // Define the Vehicle schema (simplified version for this script)
+    const VehicleSchema = new mongoose.Schema(
+      {
+        licensePlate: {
+          type: String,
+          required: true,
+          unique: true,
+          trim: true,
+          uppercase: true,
+        },
+        make: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        vehicleModel: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        year: {
+          type: Number,
+          required: true,
+          min: 1900,
+          max: new Date().getFullYear() + 1,
+        },
+        vin: {
+          type: String,
+          required: true,
+          unique: true,
+          trim: true,
+          uppercase: true,
+        },
+        nextServiceDate: {
+          type: Date,
+          required: true,
+        },
+        odometer: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        status: {
+          type: String,
+          enum: ["active", "maintenance", "out_of_service"],
+          default: "active",
+        },
+        driverId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: false,
+        },
+        companyId: {
+          type: String,
+          required: false,
+        },
+      },
+      {
+        timestamps: true,
+      }
     );
-    console.log("Connected to MongoDB");
 
-    // Get existing users
-    const users = await User.find({ isActive: true });
-    const admin = users.find((u) => u.role === "admin");
-    const managers = users.filter((u) => u.role === "manager");
-    const drivers = users.filter((u) => u.role === "driver");
+    const Vehicle = mongoose.model("Vehicle", VehicleSchema);
 
-    if (!admin) {
-      console.log("No admin found. Please run create-new-hierarchy.js first.");
-      return;
+    // Get the driver user to assign some vehicles
+    const User = mongoose.model(
+      "User",
+      new mongoose.Schema({}, { strict: false })
+    );
+    const driver = await User.findOne({ email: "driver@fleetmanagement.com" });
+
+    if (!driver) {
+      console.log("❌ Driver user not found. Please create driver first.");
+      process.exit(1);
     }
 
-    const companyId = admin.companyId;
-
     // Sample vehicles data
-    const vehiclesData = [
+    const vehicles = [
       {
         licensePlate: "ABC-123",
-        make: "Ford",
-        model: "Transit",
+        make: "Toyota",
+        vehicleModel: "Camry",
         year: 2022,
-        vin: "1FTBW2CMXNKA12345",
+        vin: "1HGBH41JXMN109186",
         nextServiceDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
         odometer: 25000,
         status: "active",
-        driverId: drivers[0]?._id,
+        driverId: driver._id,
       },
       {
         licensePlate: "XYZ-789",
-        make: "Chevrolet",
-        model: "Express",
+        make: "Ford",
+        vehicleModel: "Transit",
         year: 2021,
-        vin: "1GCGSCEN1MZ123456",
+        vin: "1FTBW2CM5HKA12345",
         nextServiceDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // 15 days from now
         odometer: 45000,
         status: "active",
-        driverId: drivers[1]?._id,
+        driverId: driver._id,
       },
       {
         licensePlate: "DEF-456",
-        make: "Mercedes",
-        model: "Sprinter",
+        make: "Chevrolet",
+        vehicleModel: "Silverado",
         year: 2023,
-        vin: "WDB9066371L123456",
+        vin: "1GCUYDED2PZ123456",
         nextServiceDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days from now
         odometer: 12000,
         status: "active",
-        driverId: drivers[2]?._id,
+        // No driver assigned
       },
       {
-        licensePlate: "GHI-789",
-        make: "Ford",
-        model: "E-Series",
+        licensePlate: "GHI-321",
+        make: "Nissan",
+        vehicleModel: "NV200",
         year: 2020,
-        vin: "1FTSE3EL2LKA12345",
+        vin: "1N6BD0CT5LN123456",
         nextServiceDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days overdue
-        odometer: 75000,
+        odometer: 78000,
         status: "maintenance",
-        driverId: drivers[3]?._id,
+        // No driver assigned
       },
       {
-        licensePlate: "JKL-012",
-        make: "Ram",
-        model: "ProMaster",
-        year: 2021,
-        vin: "3C6TRVAG8ME123456",
+        licensePlate: "JKL-654",
+        make: "Mercedes-Benz",
+        vehicleModel: "Sprinter",
+        year: 2022,
+        vin: "WDB9066321LA12345",
         nextServiceDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000), // 45 days from now
-        odometer: 38000,
+        odometer: 32000,
+        status: "active",
+        driverId: driver._id,
+      },
+      {
+        licensePlate: "MNO-987",
+        make: "Volkswagen",
+        vehicleModel: "Crafter",
+        year: 2021,
+        vin: "WV2ZZZ7HZMH123456",
+        nextServiceDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000), // 20 days from now
+        odometer: 55000,
         status: "active",
         // No driver assigned
       },
     ];
 
-    console.log("Creating sample vehicles...");
-
-    for (const vehicleData of vehiclesData) {
-      const vehicle = new Vehicle({
-        ...vehicleData,
-        companyId: companyId,
-      });
-
-      await vehicle.save();
-      console.log(
-        `✅ Created vehicle: ${vehicleData.year} ${vehicleData.make} ${vehicleData.model} (${vehicleData.licensePlate})`
-      );
-
-      if (vehicleData.driverId) {
-        const driver = drivers.find(
-          (d) => d._id.toString() === vehicleData.driverId.toString()
-        );
-        console.log(`   Assigned to: ${driver?.firstName} ${driver?.lastName}`);
-      } else {
-        console.log(`   Unassigned`);
-      }
-    }
-
-    // Verify assignments
-    console.log("\n🔍 Verifying vehicle assignments:");
-    const vehicles = await Vehicle.find({ companyId }).populate(
-      "driverId",
-      "firstName lastName email"
-    );
-
-    vehicles.forEach((vehicle) => {
-      const driverName = vehicle.driverId
-        ? `${vehicle.driverId.firstName} ${vehicle.driverId.lastName}`
-        : "Unassigned";
-      console.log(
-        `- ${vehicle.licensePlate}: ${vehicle.year} ${vehicle.make} ${vehicle.model} → ${driverName}`
-      );
+    // Check if vehicles already exist
+    const existingVehicles = await Vehicle.find({
+      licensePlate: { $in: vehicles.map((v) => v.licensePlate) },
     });
 
-    console.log("\n✅ Sample vehicles created successfully!");
+    if (existingVehicles.length > 0) {
+      console.log("❌ Some vehicles already exist. Skipping creation.");
+      console.log(
+        "Existing vehicles:",
+        existingVehicles.map((v) => v.licensePlate)
+      );
+      process.exit(0);
+    }
+
+    // Create vehicles
+    const createdVehicles = await Vehicle.insertMany(vehicles);
+
+    console.log("✅ Sample vehicles created successfully!");
+    console.log(`📊 Created ${createdVehicles.length} vehicles:`);
+
+    createdVehicles.forEach((vehicle) => {
+      const driverInfo = vehicle.driverId
+        ? " (Assigned to driver)"
+        : " (Unassigned)";
+      console.log(
+        `   🚗 ${vehicle.licensePlate} - ${vehicle.year} ${vehicle.make} ${vehicle.vehicleModel}${driverInfo}`
+      );
+    });
   } catch (error) {
-    console.error("Error creating sample vehicles:", error);
+    console.error("❌ Error creating sample vehicles:", error);
   } finally {
     await mongoose.disconnect();
-    console.log("\nDisconnected from MongoDB");
+    console.log("📊 Disconnected from MongoDB");
   }
 }
 

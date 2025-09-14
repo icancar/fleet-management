@@ -8,7 +8,7 @@ export function formatDistance(meters: number): string {
     return `${Math.round(meters)}m`;
   } else {
     const km = meters / 1000;
-    return `${km.toFixed(1)}km`;
+    return `${km.toFixed(2)}km`;
   }
 }
 
@@ -37,30 +37,30 @@ export function formatSpeed(metersPerSecond: number): string {
 }
 
 /**
- * Format dates consistently
+ * Format dates consistently using European format
  */
 export function formatDate(date: Date | string, format: 'short' | 'long' | 'time' = 'short'): string {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
   
   switch (format) {
     case 'long':
-      return dateObj.toLocaleDateString('en-US', {
+      return dateObj.toLocaleDateString('en-GB', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric'
       });
     case 'time':
-      return dateObj.toLocaleString('en-US', {
+      return dateObj.toLocaleString('en-GB', {
+        day: '2-digit',
         month: 'short',
-        day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
       });
     default:
-      return dateObj.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
+      return dateObj.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
         year: 'numeric'
       });
   }

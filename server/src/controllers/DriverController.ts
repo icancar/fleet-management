@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { createError } from '../middleware/errorHandler';
 import { ApiResponse } from '@fleet-management/shared';
 import { User, UserRole, IUser } from '../models/User';
+import bcrypt from 'bcryptjs';
 
 export class DriverController {
   
@@ -158,10 +159,14 @@ export class DriverController {
         assignedManagerId = managerId;
       }
 
+      // Hash password
+      const saltRounds = 12;
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+
       // Create new driver
       const driver = new User({
         email,
-        password,
+        password: hashedPassword,
         firstName,
         lastName,
         role: UserRole.DRIVER,
@@ -310,10 +315,14 @@ export class DriverController {
         });
       }
 
+      // Hash password
+      const saltRounds = 12;
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+
       // Create new manager
       const manager = new User({
         email,
-        password,
+        password: hashedPassword,
         firstName,
         lastName,
         phone,

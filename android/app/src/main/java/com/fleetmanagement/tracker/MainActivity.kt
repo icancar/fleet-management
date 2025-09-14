@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Button
@@ -20,10 +21,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewModel: MainViewModel
     private lateinit var statusText: TextView
     private lateinit var serverUrlText: TextView
-    private lateinit var debugText: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private lateinit var viewRoutesButton: Button
+    private lateinit var logoutButton: Button
+    private lateinit var userInfoText: TextView
+    private lateinit var sharedPreferences: SharedPreferences
     
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -40,6 +43,17 @@ class MainActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Check authentication first
+        sharedPreferences = getSharedPreferences("fleet_management", Context.MODE_PRIVATE)
+        val token = sharedPreferences.getString("auth_token", null)
+        
+        if (token == null) {
+            // User not logged in, redirect to login
+            navigateToLogin()
+            return
+        }
+        
         setContentView(R.layout.activity_main)
         
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
@@ -47,15 +61,17 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupObservers()
         checkPermissions()
+        displayUserInfo()
     }
     
     private fun initViews() {
         statusText = findViewById(R.id.statusText)
         serverUrlText = findViewById(R.id.serverUrlText)
-        debugText = findViewById(R.id.debugText)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         viewRoutesButton = findViewById(R.id.viewRoutesButton)
+        logoutButton = findViewById(R.id.logoutButton)
+        userInfoText = findViewById(R.id.userInfoText)
         
         startButton.setOnClickListener {
             if (checkPermissions()) {
@@ -71,6 +87,10 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, RouteMapActivity::class.java)
             startActivity(intent)
         }
+        
+        logoutButton.setOnClickListener {
+            performLogout()
+        }
     }
     
     private fun setupObservers() {
@@ -82,24 +102,6 @@ class MainActivity : AppCompatActivity() {
             statusText.text = "Last Location: ${location.latitude}, ${location.longitude}"
         }
         
-        // Register broadcast receiver for debug messages
-        registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when (intent?.action) {
-                    "LOCATION_SENT_SUCCESS" -> {
-                        val message = intent.getStringExtra("message") ?: "Location sent successfully"
-                        updateDebugInfo(message)
-                    }
-                    "LOCATION_SENT_FAILED" -> {
-                        val message = intent.getStringExtra("message") ?: "Failed to send location"
-                        updateDebugInfo(message)
-                    }
-                }
-            }
-        }, IntentFilter().apply {
-            addAction("LOCATION_SENT_SUCCESS")
-            addAction("LOCATION_SENT_FAILED")
-        })
     }
     
     private fun checkPermissions(): Boolean {
@@ -155,16 +157,39 @@ class MainActivity : AppCompatActivity() {
         
         if (isTracking) {
             statusText.text = "Location tracking is active"
-            debugText.text = "Debug: Waiting for location updates..."
         } else {
             statusText.text = "Location tracking stopped"
-            debugText.text = "Debug: No location data yet"
         }
     }
 
-    fun updateDebugInfo(message: String) {
-        runOnUiThread {
-            debugText.text = "Debug: $message"
-        }
+    
+    private fun displayUserInfo() {
+        val userName = sharedPreferences.getString("user_name", "Unknown")
+        val userRole = sharedPreferences.getString("user_role", "Unknown")
+        userInfoText.text = "Logged in as: $userName ($userRole)"
+    }
+    
+    private fun performLogout() {
+        // Clear stored authentication data
+        sharedPreferences.edit()
+            .remove("auth_token")
+            .remove("user_id")
+            .remove("user_email")
+            .remove("user_name")
+            .remove("user_role")
+            .apply()
+        
+        // Stop location tracking if running
+        stopLocationTracking()
+        
+        // Navigate to login
+        navigateToLogin()
+    }
+    
+    private fun navigateToLogin() {
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 }

@@ -15,7 +15,12 @@ const validateVehicle = [
   body('vin').isLength({ min: 17, max: 17 }).withMessage('VIN must be 17 characters'),
   body('nextServiceDate').isISO8601().withMessage('Valid service date is required'),
   body('odometer').isInt({ min: 0 }).withMessage('Odometer must be a positive number'),
-  body('driverId').optional().isMongoId().withMessage('Valid driver ID is required'),
+  body('driverId').optional().custom((value) => {
+    // Allow empty string, null, or undefined (unassigned vehicle)
+    if (value === '' || value === null || value === undefined) return true;
+    // If a value is provided, it must be a valid MongoDB ObjectId
+    return /^[0-9a-fA-F]{24}$/.test(value);
+  }).withMessage('Valid driver ID is required'),
   validateRequest
 ];
 
@@ -29,7 +34,9 @@ const validateVehicleUpdate = [
   body('odometer').optional().isInt({ min: 0 }).withMessage('Odometer must be a positive number'),
   body('status').optional().isIn(['active', 'maintenance', 'out_of_service']).withMessage('Invalid status'),
   body('driverId').optional().custom((value) => {
+    // Allow empty string, null, or undefined (unassigned vehicle)
     if (value === '' || value === null || value === undefined) return true;
+    // If a value is provided, it must be a valid MongoDB ObjectId
     return /^[0-9a-fA-F]{24}$/.test(value);
   }).withMessage('Valid driver ID is required'),
   validateRequest
@@ -58,5 +65,11 @@ router.patch('/:id/service-done', requireManager, vehicleController.markServiceD
 
 // Delete vehicle (soft delete)
 router.delete('/:id', requireManager, vehicleController.deleteVehicle);
+
+// Activate vehicle (change status from out_of_service to active)
+router.patch('/:id/activate', requireManager, vehicleController.activateVehicle);
+
+// Hard delete vehicle (permanently remove from database - Manager or Admin)
+router.delete('/:id/permanent', requireManager, vehicleController.hardDeleteVehicle);
 
 export { router as vehicleRoutes };

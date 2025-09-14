@@ -1,7 +1,9 @@
 package com.fleetmanagement.tracker
 
 import android.app.*
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.location.Location
 import android.os.Binder
 import android.os.IBinder
@@ -12,7 +14,6 @@ import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import java.util.*
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import android.content.Context
 
 class LocationTrackingService : LifecycleService() {
     
@@ -24,6 +25,7 @@ class LocationTrackingService : LifecycleService() {
     private var isTracking = false
     private var locationUpdateJob: Job? = null
     private val apiService = ApiService.create()
+    private lateinit var sharedPreferences: SharedPreferences
     
     private val notificationId = 1001
     private val channelId = "location_tracking_channel"
@@ -34,6 +36,7 @@ class LocationTrackingService : LifecycleService() {
     
     override fun onCreate() {
         super.onCreate()
+        sharedPreferences = getSharedPreferences("fleet_management", Context.MODE_PRIVATE)
         createNotificationChannel()
         setupLocationServices()
     }
@@ -143,6 +146,7 @@ class LocationTrackingService : LifecycleService() {
         // Send location to server
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val userId = sharedPreferences.getString("user_id", null)
                 val locationData = LocationData.create(
                     latitude = location.latitude,
                     longitude = location.longitude,
@@ -151,36 +155,21 @@ class LocationTrackingService : LifecycleService() {
                     speed = location.speed,
                     bearing = location.bearing,
                     altitude = location.altitude,
-                    deviceId = getDeviceIdentifier()
+                    deviceId = getDeviceIdentifier(),
+                    userId = userId
                 )
                 
-                // Log the data being sent
-                val debugMessage = "Sending: ${location.latitude}, ${location.longitude} to http://192.168.1.2:3001/api/location with device: ${getDeviceIdentifier()}"
-                println(debugMessage)
                 
                 val response = apiService.sendLocation(locationData)
                 
                 if (response.isSuccessful) {
-                    println("✅ Location sent successfully: ${location.latitude}, ${location.longitude}")
-                    // Send local broadcast to update map automatically
-                    LocalBroadcastManager.getInstance(this@LocationTrackingService)
-                        .sendBroadcast(Intent("LOCATION_SENT_SUCCESS").apply {
-                            putExtra("message", "Location sent: ${location.latitude}, ${location.longitude}")
-                        })
+                    // Location sent successfully
                 } else {
-                    println("❌ Failed to send location: HTTP ${response.code()}")
-                    LocalBroadcastManager.getInstance(this@LocationTrackingService)
-                        .sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
-                            putExtra("message", "Failed to send: HTTP ${response.code()}")
-                        })
+                    // Failed to send location
                 }
                 
             } catch (e: Exception) {
-                println("❌ Exception sending location: ${e.message}")
-                LocalBroadcastManager.getInstance(this@LocationTrackingService)
-                    .sendBroadcast(Intent("LOCATION_SENT_FAILED").apply {
-                        putExtra("message", "Exception: ${e.message}")
-                    })
+                // Handle exception silently
             }
         }
     }

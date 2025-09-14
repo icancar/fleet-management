@@ -128,6 +128,7 @@ export const Vehicles: React.FC = () => {
           odometer: 0,
           driverId: ''
         });
+        showSuccess('Success!', editingVehicle ? 'Vehicle updated successfully!' : 'Vehicle created successfully!');
       } else {
         const errorData = await response.json();
         console.error('Error saving vehicle:', response.status, response.statusText, errorData);
@@ -135,6 +136,7 @@ export const Vehicles: React.FC = () => {
       }
     } catch (error) {
       console.error('Error saving vehicle:', error);
+      showError('Error', 'An unexpected error occurred. Please try again.');
     }
   };
 
@@ -191,9 +193,69 @@ export const Vehicles: React.FC = () => {
 
       if (response.ok) {
         await fetchVehicles();
+        showSuccess('Success!', 'Vehicle deactivated successfully!');
+      } else {
+        const errorData = await response.json();
+        console.error('Error deleting vehicle:', response.status, response.statusText, errorData);
+        showError('Error', errorData.message || 'Failed to deactivate vehicle');
       }
     } catch (error) {
       console.error('Error deleting vehicle:', error);
+      showError('Error', 'An unexpected error occurred. Please try again.');
+    }
+  };
+
+  const handleActivate = async (vehicleId: string) => {
+    if (!window.confirm('Are you sure you want to activate this vehicle?')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/vehicles/${vehicleId}/activate`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        await fetchVehicles();
+        showSuccess('Success!', 'Vehicle activated successfully!');
+      } else {
+        const errorData = await response.json();
+        console.error('Error activating vehicle:', response.status, response.statusText, errorData);
+        showError('Error', errorData.message || 'Failed to activate vehicle');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      showError('Error', 'An unexpected error occurred. Please try again.');
+    }
+  };
+
+  const handleHardDelete = async (vehicleId: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this vehicle? This action cannot be undone!')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/vehicles/${vehicleId}/permanent`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        await fetchVehicles();
+        showSuccess('Success!', 'Vehicle permanently deleted!');
+      } else {
+        const errorData = await response.json();
+        console.error('Error permanently deleting vehicle:', response.status, response.statusText, errorData);
+        showError('Error', errorData.message || 'Failed to permanently delete vehicle');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      showError('Error', 'An unexpected error occurred. Please try again.');
     }
   };
 
@@ -262,7 +324,7 @@ export const Vehicles: React.FC = () => {
                   Driver
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Odometer
+                  Odometer (km)
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Next Service
@@ -293,7 +355,7 @@ export const Vehicles: React.FC = () => {
                     <div className="text-sm text-gray-900">{getDriverName(vehicle.driverId)}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{vehicle.odometer.toLocaleString()} mi</div>
+                    <div className="text-sm text-gray-900">{vehicle.odometer.toLocaleString()} km</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
@@ -331,12 +393,29 @@ export const Vehicles: React.FC = () => {
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => handleDelete(vehicle._id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Deactivate
-                      </button>
+                      {vehicle.status === 'out_of_service' ? (
+                        <>
+                          <button
+                            onClick={() => handleActivate(vehicle._id)}
+                            className="text-green-600 hover:text-green-900 mr-3"
+                          >
+                            Activate
+                          </button>
+                          <button
+                            onClick={() => handleHardDelete(vehicle._id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleDelete(vehicle._id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Deactivate
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -427,7 +506,7 @@ export const Vehicles: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Odometer</label>
+                    <label className="block text-sm font-medium text-gray-700">Odometer (km)</label>
                     <input
                       type="number"
                       value={formData.odometer}
@@ -435,6 +514,7 @@ export const Vehicles: React.FC = () => {
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       required
                       min="0"
+                      placeholder="Enter odometer reading in kilometers"
                     />
                   </div>
                   <div>

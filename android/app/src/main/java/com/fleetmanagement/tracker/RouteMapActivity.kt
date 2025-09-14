@@ -30,8 +30,8 @@ class RouteMapActivity : AppCompatActivity() {
     private lateinit var speedText: TextView
     
     private val gson = Gson()
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    private val displayDateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.US)
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
+    private val displayDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.UK)
     private var currentSelectedDate = ""
     
     // Variables to store current map state for zoom preservation
@@ -76,6 +76,7 @@ class RouteMapActivity : AppCompatActivity() {
         // Initialize WebView
         webView = findViewById(R.id.map)
         webView.settings.javaScriptEnabled = true
+        webView.settings.userAgentString = "FleetManagement/1.0 (Android; Mobile)"
         webView.webViewClient = WebViewClient()
         
         // Add JavaScript interface for map state communication
@@ -461,8 +462,12 @@ class RouteMapActivity : AppCompatActivity() {
                     zoomControl: false
                 }).setView([$mapLat, $mapLon], $mapZoom);
                 
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
+                // Use CartoDB tiles as primary (more reliable than OSM direct)
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+                    maxZoom: 20,
+                    subdomains: 'abcd',
+                    userAgent: 'FleetManagement/1.0'
                 }).addTo(map);
                 
                 var routePoints = [
@@ -601,11 +606,11 @@ class RouteMapActivity : AppCompatActivity() {
         }
     }
     
-    private fun formatDistance(meters: Double): String {
-        return if (meters < 1000) {
-            "${String.format("%.1f", meters)}m"
+    private fun formatDistance(kilometers: Double): String {
+        return if (kilometers < 1) {
+            "${String.format("%.1f", kilometers * 1000)}m"
         } else {
-            "${String.format("%.2f", meters / 1000)}km"
+            "${String.format("%.2f", kilometers)}km"
         }
     }
     
@@ -623,8 +628,8 @@ class RouteMapActivity : AppCompatActivity() {
     
     private fun formatTime(timestamp: String): String {
         return try {
-            val date = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).parse(timestamp)
-            SimpleDateFormat("HH:mm", Locale.US).format(date ?: Date())
+            val date = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.UK).parse(timestamp)
+            SimpleDateFormat("HH:mm", Locale.UK).format(date ?: Date())
         } catch (e: Exception) {
             timestamp
         }

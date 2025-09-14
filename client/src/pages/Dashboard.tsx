@@ -23,6 +23,18 @@ interface DashboardStats {
     total: number;
     average: number;
   };
+  // Driver-specific fields
+  myVehicle?: {
+    _id: string;
+    make: string;
+    model: string;
+    year: number;
+    licensePlate: string;
+    odometer: number;
+    status: string;
+    nextServiceDate: string;
+    serviceInterval: number;
+  };
 }
 
 interface RecentActivity {
@@ -143,50 +155,104 @@ export const Dashboard: React.FC = () => {
     );
   }
 
-  const statsCards = [
-    { 
-      name: 'Total Vehicles', 
-      value: stats.vehicles.total.toString(), 
-      icon: Car, 
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100'
-    },
-    { 
-      name: 'Active Vehicles', 
-      value: stats.vehicles.active.toString(), 
-      icon: CheckCircle, 
-      color: 'text-green-600',
-      bgColor: 'bg-green-100'
-    },
-    { 
-      name: 'Total Drivers', 
-      value: stats.drivers.total.toString(), 
-      icon: Users, 
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100'
-    },
-    { 
-      name: 'Assigned Drivers', 
-      value: stats.drivers.assigned.toString(), 
-      icon: Users, 
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-100'
-    },
-    { 
-      name: 'Maintenance Due', 
-      value: stats.vehicles.dueForService.toString(), 
-      icon: AlertTriangle, 
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-100'
-    },
-    { 
-      name: 'Overdue Service', 
-      value: stats.vehicles.overdue.toString(), 
-      icon: Wrench, 
-      color: 'text-red-600',
-      bgColor: 'bg-red-100'
-    },
-  ];
+  // Role-specific stats cards
+  const getStatsCards = () => {
+    if (user?.role === UserRole.DRIVER) {
+      // Driver-specific cards
+      return [
+        { 
+          name: 'My Vehicle Status', 
+          value: stats.myVehicle?.status === 'active' ? 'Active' : 'Maintenance', 
+          icon: Car, 
+          color: stats.myVehicle?.status === 'active' ? 'text-green-600' : 'text-yellow-600',
+          bgColor: stats.myVehicle?.status === 'active' ? 'bg-green-100' : 'bg-yellow-100'
+        },
+        { 
+          name: 'Current Odometer', 
+          value: stats.myVehicle ? `${stats.myVehicle.odometer.toLocaleString()} km` : 'N/A', 
+          icon: Car, 
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-100'
+        },
+        { 
+          name: 'Next Service', 
+          value: stats.myVehicle ? new Date(stats.myVehicle.nextServiceDate).toLocaleDateString() : 'N/A', 
+          icon: Wrench, 
+          color: 'text-orange-600',
+          bgColor: 'bg-orange-100'
+        },
+        { 
+          name: 'Service Interval', 
+          value: stats.myVehicle ? `${stats.myVehicle.serviceInterval.toLocaleString()} km` : 'N/A', 
+          icon: Clock, 
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-100'
+        },
+      ];
+    } else {
+      // Admin/Manager cards
+      return [
+        { 
+          name: 'Total Vehicles', 
+          value: stats.vehicles.total.toString(), 
+          icon: Car, 
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-100'
+        },
+        { 
+          name: 'Active Vehicles', 
+          value: stats.vehicles.active.toString(), 
+          icon: CheckCircle, 
+          color: 'text-green-600',
+          bgColor: 'bg-green-100'
+        },
+        { 
+          name: 'Total Drivers', 
+          value: stats.drivers.total.toString(), 
+          icon: Users, 
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-100'
+        },
+        { 
+          name: 'Assigned Drivers', 
+          value: stats.drivers.assigned.toString(), 
+          icon: Users, 
+          color: 'text-indigo-600',
+          bgColor: 'bg-indigo-100'
+        },
+        { 
+          name: 'Maintenance Due', 
+          value: stats.vehicles.dueForService.toString(), 
+          icon: AlertTriangle, 
+          color: 'text-yellow-600',
+          bgColor: 'bg-yellow-100'
+        },
+        { 
+          name: 'Overdue Service', 
+          value: stats.vehicles.overdue.toString(), 
+          icon: Wrench, 
+          color: 'text-red-600',
+          bgColor: 'bg-red-100'
+        },
+        { 
+          name: 'Total Mileage', 
+          value: `${stats.mileage.total.toLocaleString()} km`, 
+          icon: Car, 
+          color: 'text-indigo-600',
+          bgColor: 'bg-indigo-100'
+        },
+        { 
+          name: 'Average Mileage', 
+          value: `${Math.round(stats.mileage.average).toLocaleString()} km`, 
+          icon: Car, 
+          color: 'text-cyan-600',
+          bgColor: 'bg-cyan-100'
+        },
+      ];
+    }
+  };
+
+  const statsCards = getStatsCards();
 
   return (
     <div className="space-y-6">
@@ -209,7 +275,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {statsCards.map((item) => (
           <div key={item.name} className="bg-white overflow-hidden shadow rounded-lg">
             <div className="p-5">
@@ -235,126 +301,307 @@ export const Dashboard: React.FC = () => {
         ))}
       </div>
 
-      {/* Additional Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Vehicle Status Breakdown */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Vehicle Status</h3>
-            <div className="mt-5 space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Active</span>
-                <span className="text-sm font-medium text-gray-900">{stats.vehicles.active}</span>
+      {/* Role-specific Additional Stats */}
+      {user?.role === UserRole.DRIVER ? (
+        /* Driver-specific vehicle details */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* My Vehicle Details */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">My Vehicle Details</h3>
+              <div className="mt-5 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Vehicle</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {stats.myVehicle ? `${stats.myVehicle.year} ${stats.myVehicle.make} ${stats.myVehicle.model}` : 'No vehicle assigned'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">License Plate</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {stats.myVehicle?.licensePlate || 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Current Odometer</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {stats.myVehicle ? `${stats.myVehicle.odometer.toLocaleString()} km` : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Status</span>
+                  <span className={`text-sm font-medium ${
+                    stats.myVehicle?.status === 'active' ? 'text-green-600' : 'text-yellow-600'
+                  }`}>
+                    {stats.myVehicle?.status === 'active' ? 'Active' : 'Maintenance Required'}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">In Maintenance</span>
-                <span className="text-sm font-medium text-gray-900">{stats.vehicles.maintenance}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Out of Service</span>
-                <span className="text-sm font-medium text-gray-900">{stats.vehicles.outOfService}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Unassigned</span>
-                <span className="text-sm font-medium text-gray-900">{stats.vehicles.unassigned}</span>
+            </div>
+          </div>
+
+          {/* Maintenance Information */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Maintenance Information</h3>
+              <div className="mt-5 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Next Service Date</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {stats.myVehicle ? new Date(stats.myVehicle.nextServiceDate).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Service Interval</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {stats.myVehicle ? `${stats.myVehicle.serviceInterval.toLocaleString()} km` : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Days Until Service</span>
+                  <span className={`text-sm font-medium ${
+                    stats.myVehicle && new Date(stats.myVehicle.nextServiceDate) < new Date() 
+                      ? 'text-red-600' 
+                      : stats.myVehicle && new Date(stats.myVehicle.nextServiceDate) <= new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+                      ? 'text-yellow-600'
+                      : 'text-gray-900'
+                  }`}>
+                    {stats.myVehicle ? 
+                      (() => {
+                        const daysUntil = Math.ceil((new Date(stats.myVehicle.nextServiceDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                        return daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` : `${daysUntil} days`;
+                      })() 
+                      : 'N/A'
+                    }
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      ) : (
+        /* Admin/Manager additional stats */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Vehicle Status Breakdown */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Vehicle Status</h3>
+              <div className="mt-5 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Active</span>
+                  <span className="text-sm font-medium text-gray-900">{stats.vehicles.active}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">In Maintenance</span>
+                  <span className="text-sm font-medium text-gray-900">{stats.vehicles.maintenance}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Out of Service</span>
+                  <span className="text-sm font-medium text-gray-900">{stats.vehicles.outOfService}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Unassigned</span>
+                  <span className="text-sm font-medium text-gray-900">{stats.vehicles.unassigned}</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        {/* Driver Assignment Status */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Driver Assignment</h3>
-            <div className="mt-5 space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Total Drivers</span>
-                <span className="text-sm font-medium text-gray-900">{stats.drivers.total}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Assigned to Vehicles</span>
-                <span className="text-sm font-medium text-gray-900">{stats.drivers.assigned}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Unassigned</span>
-                <span className="text-sm font-medium text-gray-900">{stats.drivers.unassigned}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Assignment Rate</span>
-                <span className="text-sm font-medium text-gray-900">
-                  {stats.drivers.total > 0 ? Math.round((stats.drivers.assigned / stats.drivers.total) * 100) : 0}%
-                </span>
+          {/* Driver Assignment Status */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Driver Assignment</h3>
+              <div className="mt-5 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Total Drivers</span>
+                  <span className="text-sm font-medium text-gray-900">{stats.drivers.total}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Assigned to Vehicles</span>
+                  <span className="text-sm font-medium text-gray-900">{stats.drivers.assigned}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Unassigned</span>
+                  <span className="text-sm font-medium text-gray-900">{stats.drivers.unassigned}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Assignment Rate</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {stats.drivers.total > 0 ? Math.round((stats.drivers.assigned / stats.drivers.total) * 100) : 0}%
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Vehicles */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Vehicles</h3>
-            <div className="mt-5 space-y-4">
-              {recentActivity?.recentVehicles.length > 0 ? (
-                recentActivity.recentVehicles.map((vehicle, index) => (
-                  <div key={index} className="flex items-center space-x-3">
+      {/* Role-specific Recent Activity */}
+      {user?.role === UserRole.DRIVER ? (
+        /* Driver-specific activity */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* My Vehicle Status */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">My Vehicle Status</h3>
+              <div className="mt-5">
+                {stats.myVehicle ? (
+                  <div className="flex items-center space-x-3">
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                        <Car className="h-4 w-4 text-blue-600" />
+                      <div className={`h-8 w-8 rounded-full ${
+                        stats.myVehicle.status === 'active' ? 'bg-green-100' : 'bg-yellow-100'
+                      } flex items-center justify-center`}>
+                        <Car className={`h-4 w-4 ${
+                          stats.myVehicle.status === 'active' ? 'text-green-600' : 'text-yellow-600'
+                        }`} />
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
-                        {vehicle.year} {vehicle.make} {vehicle.model}
+                        {stats.myVehicle.year} {stats.myVehicle.make} {stats.myVehicle.model}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {vehicle.licensePlate} • {vehicle.driverId ? `${vehicle.driverId.firstName} ${vehicle.driverId.lastName}` : 'Unassigned'}
+                        {stats.myVehicle.licensePlate} • {stats.myVehicle.status === 'active' ? 'Active' : 'Maintenance Required'}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 text-sm text-gray-500">
-                      {new Date(vehicle.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-gray-500">No recent vehicles</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Maintenance Alerts */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Maintenance Alerts</h3>
-            <div className="mt-5 space-y-4">
-              {recentActivity?.maintenanceAlerts.length > 0 ? (
-                recentActivity.maintenanceAlerts.map((vehicle, index) => (
-                  <div key={index} className="flex items-center space-x-3">
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
-                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        Service Due - {vehicle.year} {vehicle.make} {vehicle.model}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {vehicle.licensePlate} • Due: {new Date(vehicle.nextServiceDate).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex-shrink-0 flex items-center space-x-2">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        new Date(vehicle.nextServiceDate) < new Date() 
-                          ? 'bg-red-100 text-red-800' 
+                        stats.myVehicle.status === 'active' 
+                          ? 'bg-green-100 text-green-800' 
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {new Date(vehicle.nextServiceDate) < new Date() ? 'Overdue' : 'Due Soon'}
+                        {stats.myVehicle.status === 'active' ? 'Active' : 'Maintenance'}
                       </span>
-                      {(user?.role === UserRole.ADMIN || user?.role === UserRole.MANAGER) && (
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No vehicle assigned</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Maintenance Alerts for My Vehicle */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Maintenance Status</h3>
+              <div className="mt-5">
+                {stats.myVehicle ? (
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">
+                      <div className={`h-8 w-8 rounded-full ${
+                        new Date(stats.myVehicle.nextServiceDate) < new Date() 
+                          ? 'bg-red-100' 
+                          : new Date(stats.myVehicle.nextServiceDate) <= new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+                          ? 'bg-yellow-100'
+                          : 'bg-green-100'
+                      } flex items-center justify-center`}>
+                        <AlertTriangle className={`h-4 w-4 ${
+                          new Date(stats.myVehicle.nextServiceDate) < new Date() 
+                            ? 'text-red-600' 
+                            : new Date(stats.myVehicle.nextServiceDate) <= new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+                            ? 'text-yellow-600'
+                            : 'text-green-600'
+                        }`} />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        Service Due - {stats.myVehicle.year} {stats.myVehicle.make} {stats.myVehicle.model}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {stats.myVehicle.licensePlate} • Due: {new Date(stats.myVehicle.nextServiceDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        new Date(stats.myVehicle.nextServiceDate) < new Date() 
+                          ? 'bg-red-100 text-red-800' 
+                          : new Date(stats.myVehicle.nextServiceDate) <= new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {new Date(stats.myVehicle.nextServiceDate) < new Date() 
+                          ? 'Overdue' 
+                          : new Date(stats.myVehicle.nextServiceDate) <= new Date(Date.now() + 10 * 24 * 60 * 60 * 1000)
+                          ? 'Due Soon'
+                          : 'Up to Date'
+                        }
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No vehicle assigned</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Admin/Manager recent activity */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Vehicles */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Vehicles</h3>
+              <div className="mt-5 space-y-4">
+                {recentActivity?.recentVehicles.length > 0 ? (
+                  recentActivity.recentVehicles.map((vehicle, index) => (
+                    <div key={index} className="flex items-center space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                          <Car className="h-4 w-4 text-blue-600" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {vehicle.year} {vehicle.make} {vehicle.model}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {vehicle.licensePlate} • {vehicle.driverId ? `${vehicle.driverId.firstName} ${vehicle.driverId.lastName}` : 'Unassigned'}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0 text-sm text-gray-500">
+                        {new Date(vehicle.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No recent vehicles</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Maintenance Alerts */}
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">Maintenance Alerts</h3>
+              <div className="mt-5 space-y-4">
+                {recentActivity?.maintenanceAlerts.length > 0 ? (
+                  recentActivity.maintenanceAlerts.map((vehicle, index) => (
+                    <div key={index} className="flex items-center space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
+                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          Service Due - {vehicle.year} {vehicle.make} {vehicle.model}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {vehicle.licensePlate} • Due: {new Date(vehicle.nextServiceDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0 flex items-center space-x-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          new Date(vehicle.nextServiceDate) < new Date() 
+                            ? 'bg-red-100 text-red-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {new Date(vehicle.nextServiceDate) < new Date() ? 'Overdue' : 'Due Soon'}
+                        </span>
                         <button
                           onClick={() => handleServiceDone(vehicle._id)}
                           disabled={processingService === vehicle._id}
@@ -369,44 +616,74 @@ export const Dashboard: React.FC = () => {
                             </>
                           )}
                         </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-gray-500">No maintenance alerts</p>
-              )}
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No maintenance alerts</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Quick Actions */}
+      {/* Role-specific Quick Actions */}
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-lg leading-6 font-medium text-gray-900">Quick Actions</h3>
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <button 
-              onClick={() => window.location.href = '/vehicles'}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              <Car className="mr-2 h-4 w-4" />
-              Manage Vehicles
-            </button>
-            <button 
-              onClick={() => window.location.href = '/drivers'}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-            >
-              <Users className="mr-2 h-4 w-4" />
-              {user?.role === UserRole.ADMIN ? 'Manage Employees' : 'Manage Drivers'}
-            </button>
-            <button 
-              onClick={() => window.location.href = '/settings'}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              <Wrench className="mr-2 h-4 w-4" />
-              Settings
-            </button>
+            {user?.role === UserRole.DRIVER ? (
+              /* Driver-specific actions */
+              <>
+                <button 
+                  onClick={() => window.location.href = '/routes'}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <Car className="mr-2 h-4 w-4" />
+                  View My Routes
+                </button>
+                <button 
+                  onClick={() => window.location.href = '/vehicles'}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                >
+                  <Wrench className="mr-2 h-4 w-4" />
+                  My Vehicle
+                </button>
+                <button 
+                  onClick={() => window.location.href = '/settings'}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <Wrench className="mr-2 h-4 w-4" />
+                  Settings
+                </button>
+              </>
+            ) : (
+              /* Admin/Manager actions */
+              <>
+                <button 
+                  onClick={() => window.location.href = '/vehicles'}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <Car className="mr-2 h-4 w-4" />
+                  Manage Vehicles
+                </button>
+                <button 
+                  onClick={() => window.location.href = '/drivers'}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  {user?.role === UserRole.ADMIN ? 'Manage Employees' : 'Manage Drivers'}
+                </button>
+                <button 
+                  onClick={() => window.location.href = '/settings'}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  <Wrench className="mr-2 h-4 w-4" />
+                  Settings
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

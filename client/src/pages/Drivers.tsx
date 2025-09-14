@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Search, X } from 'lucide-react';
 interface DriverFormData {
   email: string;
   password: string;
+  confirmPassword: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -16,6 +17,7 @@ interface DriverFormData {
 interface ManagerFormData {
   email: string;
   password: string;
+  confirmPassword: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -38,6 +40,7 @@ export const Drivers: React.FC = () => {
   const [formData, setFormData] = useState<DriverFormData>({
     email: '',
     password: '',
+    confirmPassword: '',
     firstName: '',
     lastName: '',
     phone: '',
@@ -46,6 +49,7 @@ export const Drivers: React.FC = () => {
   const [managerFormData, setManagerFormData] = useState<ManagerFormData>({
     email: '',
     password: '',
+    confirmPassword: '',
     firstName: '',
     lastName: '',
     phone: ''
@@ -155,6 +159,14 @@ export const Drivers: React.FC = () => {
       showError('Validation Error', 'Please select a manager for the driver.');
       return;
     }
+    if (!editingDriver && formData.password.length < 6) {
+      showError('Validation Error', 'Password must be at least 6 characters long.');
+      return;
+    }
+    if (!editingDriver && formData.password !== formData.confirmPassword) {
+      showError('Validation Error', 'Passwords do not match.');
+      return;
+    }
     
     try {
       const token = localStorage.getItem('token');
@@ -178,7 +190,7 @@ export const Drivers: React.FC = () => {
         await fetchDrivers();
         setShowModal(false);
         setEditingDriver(null);
-        setFormData({ email: '', password: '', firstName: '', lastName: '', phone: '', managerId: '' });
+        setFormData({ email: '', password: '', confirmPassword: '', firstName: '', lastName: '', phone: '', managerId: '' });
         showSuccess('Success!', editingDriver ? 'Driver updated successfully!' : 'Driver created successfully!');
       } else {
         const errorData = await response.json();
@@ -202,6 +214,7 @@ export const Drivers: React.FC = () => {
     setFormData({
       email: driver.email,
       password: '',
+      confirmPassword: '',
       firstName: driver.firstName,
       lastName: driver.lastName,
       phone: driver.phone || '',
@@ -254,6 +267,14 @@ export const Drivers: React.FC = () => {
       showError('Validation Error', 'Please enter a valid phone number (numbers only, optional + at start).');
       return;
     }
+    if (!editingManager && managerFormData.password.length < 6) {
+      showError('Validation Error', 'Password must be at least 6 characters long.');
+      return;
+    }
+    if (!editingManager && managerFormData.password !== managerFormData.confirmPassword) {
+      showError('Validation Error', 'Passwords do not match.');
+      return;
+    }
     
     try {
       const token = localStorage.getItem('token');
@@ -282,6 +303,7 @@ export const Drivers: React.FC = () => {
         setManagerFormData({
           email: '',
           password: '',
+          confirmPassword: '',
           firstName: '',
           lastName: '',
           phone: ''
@@ -309,6 +331,7 @@ export const Drivers: React.FC = () => {
     setManagerFormData({
       email: manager.email,
       password: '',
+      confirmPassword: '',
       firstName: manager.firstName,
       lastName: manager.lastName,
       phone: manager.phone || ''
@@ -348,6 +371,7 @@ export const Drivers: React.FC = () => {
     setManagerFormData({
       email: '',
       password: '',
+      confirmPassword: '',
       firstName: '',
       lastName: '',
       phone: ''
@@ -357,7 +381,7 @@ export const Drivers: React.FC = () => {
 
   const openCreateModal = () => {
     setEditingDriver(null);
-    setFormData({ email: '', password: '', firstName: '', lastName: '', phone: '', managerId: '' });
+    setFormData({ email: '', password: '', confirmPassword: '', firstName: '', lastName: '', phone: '', managerId: '' });
     setShowModal(true);
   };
 
@@ -695,16 +719,28 @@ export const Drivers: React.FC = () => {
                   />
                 </div>
                 {!editingDriver && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Password</label>
-                    <input
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Password</label>
+                      <input
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
+                      <input
+                        type="password"
+                        value={formData.confirmPassword}
+                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      />
+                    </div>
+                  </>
                 )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">First Name</label>
@@ -795,16 +831,28 @@ export const Drivers: React.FC = () => {
                   />
                 </div>
                 {!editingManager && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Password</label>
-                    <input
-                      type="password"
-                      value={managerFormData.password}
-                      onChange={(e) => setManagerFormData({ ...managerFormData, password: e.target.value })}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Password</label>
+                      <input
+                        type="password"
+                        value={managerFormData.password}
+                        onChange={(e) => setManagerFormData({ ...managerFormData, password: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
+                      <input
+                        type="password"
+                        value={managerFormData.confirmPassword}
+                        onChange={(e) => setManagerFormData({ ...managerFormData, confirmPassword: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      />
+                    </div>
+                  </>
                 )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">First Name</label>

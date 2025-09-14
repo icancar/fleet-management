@@ -12,6 +12,7 @@ export class LocationDatabaseService {
       // Create location log entry
       const locationLog = new LocationLog({
         deviceId: locationData.deviceId,
+        userId: locationData.userId, // Include userId from the request
         latitude: locationData.latitude,
         longitude: locationData.longitude,
         accuracy: locationData.accuracy,
@@ -24,7 +25,7 @@ export class LocationDatabaseService {
       const savedLocation = await locationLog.save();
 
       // Update or create device record
-      await this.updateDeviceInfo(locationData.deviceId);
+      await this.updateDeviceInfo(locationData.deviceId, locationData.userId);
 
       console.log(`📊 Saved location for device ${locationData.deviceId}: ${locationData.latitude}, ${locationData.longitude}`);
       return savedLocation;
@@ -38,15 +39,22 @@ export class LocationDatabaseService {
   /**
    * Update or create device information
    */
-  static async updateDeviceInfo(deviceId: string): Promise<IDevice> {
+  static async updateDeviceInfo(deviceId: string, userId?: string): Promise<IDevice> {
     try {
+      const updateData: any = {
+        lastSeen: new Date(),
+        isActive: true
+      };
+
+      // If userId is provided, include it in the update
+      if (userId) {
+        updateData.userId = userId;
+      }
+
       const device = await Device.findOneAndUpdate(
         { deviceId },
         {
-          $set: {
-            lastSeen: new Date(),
-            isActive: true
-          },
+          $set: updateData,
           $inc: {
             totalLocations: 1
           }
@@ -83,7 +91,9 @@ export class LocationDatabaseService {
         };
       }
 
+      console.log(`🔍 Querying locations for device ${deviceId} on date ${date}:`, query);
       const locations = await LocationLog.find(query).sort({ timestamp: 1 });
+      console.log(`🔍 Found ${locations.length} location records for device ${deviceId}`);
 
       if (locations.length === 0) {
         return [];
@@ -122,6 +132,8 @@ export class LocationDatabaseService {
           totalDuration,
           averageSpeed,
           maxSpeed,
+          startTime: routePoints[0].timestamp,
+          endTime: routePoints[routePoints.length - 1].timestamp,
           startLocation: {
             latitude: routePoints[0].latitude,
             longitude: routePoints[0].longitude,
@@ -134,6 +146,14 @@ export class LocationDatabaseService {
           },
           routePoints
         };
+
+        console.log(`🔍 Calculated route for device ${deviceId} on ${day}:`, {
+          totalDistance,
+          totalDuration,
+          totalPoints: routePoints.length,
+          averageSpeed,
+          maxSpeed
+        });
 
         dailyRoutes.push(dailyRoute);
       }
@@ -214,7 +234,8 @@ export class LocationDatabaseService {
       );
       totalDistance += distance;
     }
-    return totalDistance;
+    // Convert from meters to kilometers
+    return totalDistance / 1000;
   }
 
   /**
@@ -256,5 +277,47 @@ export class LocationDatabaseService {
 
   private static toRadians(degrees: number): number {
     return degrees * (Math.PI / 180);
+  }
+
+  /**
+   * Get driver routes for a specific date (used by admin routes)
+   */
+  static async getDriverRoutesForDate(userId: string, date: string): Promise<any[]> {
+    try {
+      // Get all devices for this user
+      const devices = await Device.find({ userId, isActive: true });
+      console.log(`🔍 Found ${devices.length} devices for user ${userId}`);
+      
+      if (devices.length === 0) {
+        return [];
+      }
+
+      const allRoutes = [];
+
+      // Get routes for each device
+      for (const device of devices) {
+        const deviceRoutes = await this.getDeviceDailyRoutes(device.deviceId, date);
+        console.log(`🔍 Device ${device.deviceId} returned ${deviceRoutes.length} routes`);
+        
+        // Add vehicle info to each route
+        const routesWithVehicleInfo = deviceRoutes.map(route => ({
+          ...route,
+          vehicleInfo: {
+            make: 'Unknown',
+            model: 'Unknown',
+            year: new Date().getFullYear(),
+            licensePlate: 'N/A'
+          }
+        }));
+
+        allRoutes.push(...routesWithVehicleInfo);
+      }
+
+      console.log(`🔍 Total routes for user ${userId}:`, allRoutes.length);
+      return allRoutes;
+    } catch (error) {
+      console.error('❌ Error getting driver routes for date:', error);
+      return [];
+    }
   }
 }

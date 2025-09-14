@@ -26,7 +26,6 @@ export interface RegisterData {
 export interface AuthResponse {
   user: IUser;
   token: string;
-  company?: ICompany;
 }
 
 export class AuthService {
@@ -56,20 +55,12 @@ export class AuthService {
 
       await user.save();
 
-      // Get company info if provided
-      let company: ICompany | undefined;
-      if (data.companyId) {
-        const companyDoc = await Company.findById(data.companyId);
-        company = companyDoc || undefined;
-      }
-
       // Generate token
       const token = this.generateToken((user._id as any).toString());
 
       return {
         user: user.toJSON(),
-        token,
-        company
+        token
       };
     } catch (error) {
       throw error;
@@ -102,85 +93,18 @@ export class AuthService {
       user.lastLogin = new Date();
       await user.save();
 
-      // Get company info
-      let company: ICompany | undefined;
-      if (user.companyId) {
-        const companyDoc = await Company.findById(user.companyId);
-        company = companyDoc || undefined;
-      }
-
       // Generate token
       const token = this.generateToken((user._id as any).toString());
 
       return {
         user: user.toJSON(),
-        token,
-        company
+        token
       };
     } catch (error) {
       throw error;
     }
   }
 
-  /**
-   * Create a company and owner
-   */
-  static async createCompanyWithOwner(companyData: {
-    name: string;
-    description?: string;
-    address?: any;
-    contactInfo?: any;
-  }, ownerData: {
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    phone?: string;
-  }): Promise<AuthResponse> {
-    try {
-      // Check if owner email already exists
-      const existingUser = await User.findOne({ email: ownerData.email });
-      if (existingUser) {
-        throw new Error('User with this email already exists');
-      }
-
-      // Create company first
-      const company = new Company({
-        ...companyData,
-        ownerId: 'temp' // Will be updated after user creation
-      });
-
-      await company.save();
-
-      // Hash password
-      const hashedPassword = await bcrypt.hash(ownerData.password, this.SALT_ROUNDS);
-
-      // Create company owner
-      const user = new User({
-        ...ownerData,
-        password: hashedPassword,
-        role: UserRole.ADMIN,
-        companyId: (company._id as any).toString()
-      });
-
-      await user.save();
-
-      // Update company with owner ID
-      company.ownerId = (user._id as any).toString();
-      await company.save();
-
-      // Generate token
-      const token = this.generateToken((user._id as any).toString());
-
-      return {
-        user: user.toJSON(),
-        token,
-        company
-      };
-    } catch (error) {
-      throw error;
-    }
-  }
 
   /**
    * Generate JWT token

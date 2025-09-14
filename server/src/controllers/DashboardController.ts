@@ -144,6 +144,25 @@ export class DashboardController {
         }
       }
 
+      // Get driver's vehicle information if user is a driver
+      let myVehicle = null;
+      if (currentUser.role === UserRole.DRIVER) {
+        const driverVehicle = await Vehicle.findOne({ driverId: currentUser._id });
+        if (driverVehicle) {
+          myVehicle = {
+            _id: driverVehicle._id,
+            make: driverVehicle.make,
+            model: driverVehicle.vehicleModel, // Use vehicleModel from schema
+            year: driverVehicle.year,
+            licensePlate: driverVehicle.licensePlate,
+            odometer: driverVehicle.odometer,
+            status: driverVehicle.status,
+            nextServiceDate: driverVehicle.nextServiceDate,
+            serviceInterval: 10000 // Default service interval since it's not in schema
+          };
+        }
+      }
+
       const stats = {
         vehicles: {
           total: totalVehicles,
@@ -173,7 +192,10 @@ export class DashboardController {
       const response: ApiResponse<any> = {
         success: true,
         data: {
-          stats,
+          stats: {
+            ...stats,
+            myVehicle
+          },
           recentActivity
         },
         message: 'Dashboard stats retrieved successfully'

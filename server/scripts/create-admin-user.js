@@ -86,6 +86,7 @@ async function createAdminUser() {
     });
 
     await adminUser.save();
+
     console.log("✅ Admin user created successfully!");
     console.log("📧 Email: admin@fleetmanagement.com");
     console.log("🔑 Password: admin123");
@@ -99,4 +100,3 @@ async function createAdminUser() {
 }
 
 createAdminUser();
-

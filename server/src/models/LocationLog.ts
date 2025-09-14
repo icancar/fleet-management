@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ILocationLog extends Document {
   deviceId: string;
+  userId?: string;
   latitude: number;
   longitude: number;
   accuracy: number;
@@ -17,6 +18,11 @@ const LocationLogSchema = new Schema<ILocationLog>({
   deviceId: {
     type: String,
     required: true,
+    index: true
+  },
+  userId: {
+    type: String,
+    required: false,
     index: true
   },
   latitude: {
@@ -55,5 +61,6 @@ const LocationLogSchema = new Schema<ILocationLog>({
 // Compound indexes for efficient queries
 LocationLogSchema.index({ deviceId: 1, timestamp: -1 });
 LocationLogSchema.index({ deviceId: 1, createdAt: -1 });
+LocationLogSchema.index({ userId: 1, timestamp: -1 });
 
 export const LocationLog = mongoose.model<ILocationLog>('LocationLog', LocationLogSchema);

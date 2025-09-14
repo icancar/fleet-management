@@ -11,7 +11,7 @@ export interface IVehicle extends Document {
   odometer: number;
   status: 'active' | 'maintenance' | 'out_of_service';
   driverId?: mongoose.Types.ObjectId; // Which driver is currently assigned
-  companyId: string;
+  companyId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -86,7 +86,7 @@ const VehicleSchema = new Schema<IVehicle>({
   },
   companyId: {
     type: String,
-    required: true
+    required: false
   }
 }, {
   timestamps: true

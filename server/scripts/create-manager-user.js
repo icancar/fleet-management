@@ -1,93 +1,61 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
-require("dotenv").config();
 
-// User schema (simplified for script)
-const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  role: {
-    type: String,
-    enum: ["admin", "driver", "manager", "company_owner"],
-    default: "driver",
-  },
-  isActive: { type: Boolean, default: true },
-  phone: String,
-  companyId: String,
-  managerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-});
-
-const User = mongoose.model("User", userSchema);
+// Connect to MongoDB
+const MONGODB_URI =
+  process.env.MONGODB_URI || "mongodb://localhost:27017/fleet-management";
 
 async function createManagerUser() {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(
-      process.env.MONGODB_URI || "mongodb://localhost:27017/fleet-management"
-    );
-    console.log("Connected to MongoDB");
+    await mongoose.connect(MONGODB_URI);
+    console.log("✅ Connected to MongoDB");
 
-    // Check if manager already exists
-    const existingManager = await User.findOne({ email: "manager@fleet.com" });
-    if (existingManager) {
-      console.log("Manager user already exists:", existingManager.email);
-      return;
+    // Get the admin user
+    const User = mongoose.model(
+      "User",
+      new mongoose.Schema({}, { strict: false })
+    );
+
+    const admin = await User.findOne({ email: "admin@fleetmanagement.com" });
+
+    if (!admin) {
+      console.log("❌ Admin user not found");
+      process.exit(1);
     }
 
-    // Create a sample company first (if needed)
-    const companyId = new mongoose.Types.ObjectId().toString();
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash("manager123", 10);
+    // Check if manager already exists
+    const existingManager = await User.findOne({
+      email: "manager@fleetmanagement.com",
+    });
+    if (existingManager) {
+      console.log("❌ Manager user already exists");
+      process.exit(0);
+    }
 
     // Create manager user
-    const manager = new User({
-      email: "manager@fleet.com",
+    const hashedPassword = await bcrypt.hash("manager123", 12);
+
+    const managerUser = new User({
+      email: "manager@fleetmanagement.com",
       password: hashedPassword,
-      firstName: "John",
+      firstName: "Jane",
       lastName: "Manager",
       role: "manager",
-      phone: "+1234567890",
-      companyId: companyId,
       isActive: true,
+      managerId: admin._id,
     });
 
-    await manager.save();
-    console.log("Manager user created successfully:");
-    console.log("Email: manager@fleet.com");
-    console.log("Password: manager123");
-    console.log("Role: manager");
-    console.log("Company ID:", companyId);
-
-    // Create a sample driver for the manager
-    const driverPassword = await bcrypt.hash("driver123", 10);
-    const driver = new User({
-      email: "driver@fleet.com",
-      password: driverPassword,
-      firstName: "Jane",
-      lastName: "Driver",
-      role: "driver",
-      phone: "+1234567891",
-      companyId: companyId,
-      managerId: manager._id,
-      isActive: true,
-    });
-
-    await driver.save();
-    console.log("\nSample driver created:");
-    console.log("Email: driver@fleet.com");
-    console.log("Password: driver123");
-    console.log("Role: driver");
-    console.log("Manager ID:", manager._id);
+    await managerUser.save();
+    console.log("✅ Manager user created successfully");
+    console.log("📧 Email: manager@fleetmanagement.com");
+    console.log("🔑 Password: manager123");
+    console.log("👤 Role: Manager");
+    console.log("👨‍💼 Manager: Admin User");
   } catch (error) {
-    console.error("Error creating manager user:", error);
+    console.error("❌ Error creating manager user:", error);
   } finally {
     await mongoose.disconnect();
-    console.log("\nDisconnected from MongoDB");
+    console.log("📊 Disconnected from MongoDB");
   }
 }
 

@@ -11,10 +11,11 @@ data class LocationData(
     val speed: Float,
     val bearing: Float,
     val altitude: Double,
-    val deviceId: String = android.os.Build.SERIAL.takeIf { it != "unknown" } ?: "unknown"
+    val deviceId: String = android.os.Build.SERIAL.takeIf { it != "unknown" } ?: "unknown",
+    val userId: String? = null
 ) {
     companion object {
-        private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.UK).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
         
@@ -26,7 +27,8 @@ data class LocationData(
             speed: Float,
             bearing: Float,
             altitude: Double,
-            deviceId: String = android.os.Build.SERIAL.takeIf { it != "unknown" } ?: "unknown"
+            deviceId: String = android.os.Build.SERIAL.takeIf { it != "unknown" } ?: "unknown",
+            userId: String? = null
         ): LocationData {
             return LocationData(
                 latitude = latitude,
@@ -36,7 +38,8 @@ data class LocationData(
                 speed = speed,
                 bearing = bearing,
                 altitude = altitude,
-                deviceId = deviceId
+                deviceId = deviceId,
+                userId = userId
             )
         }
     }

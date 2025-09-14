@@ -19,7 +19,7 @@ export class VehicleController {
           break;
 
         case UserRole.MANAGER:
-          // Manager can only see vehicles assigned to drivers they manage
+          // Manager can see vehicles assigned to drivers they manage AND unassigned vehicles
           // First, get all drivers that this manager manages
           const managedDrivers = await User.find({
             managerId: currentUser._id,
@@ -29,9 +29,13 @@ export class VehicleController {
           
           const managedDriverIds = managedDrivers.map(driver => driver._id);
           
-          // Then get vehicles assigned to these drivers
+          // Get vehicles assigned to managed drivers OR unassigned vehicles
           vehicles = await Vehicle.find({ 
-            driverId: { $in: managedDriverIds },
+            $or: [
+              { driverId: { $in: managedDriverIds } }, // Vehicles assigned to managed drivers
+              { driverId: { $exists: false } },        // Unassigned vehicles (no driverId field)
+              { driverId: null }                       // Unassigned vehicles (driverId is null)
+            ],
             companyId: currentUser.companyId
           }).populate('driverId', 'firstName lastName email');
           break;
@@ -53,7 +57,7 @@ export class VehicleController {
 
       // Add dynamic status to each vehicle and update database if needed
       const vehiclesWithDynamicStatus = await Promise.all(vehicles.map(async (vehicle) => {
-        const vehicleObj = vehicle.toObject();
+        const vehicleObj = vehicle.toJSON(); // Use toJSON to include virtual fields
         const today = new Date();
         const serviceDate = new Date(vehicle.nextServiceDate);
         const daysUntilService = Math.ceil((serviceDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -106,7 +110,7 @@ export class VehicleController {
         companyId: currentUser.companyId
       };
 
-      // If user is a manager, ensure they can only access vehicles assigned to drivers they manage
+      // If user is a manager, ensure they can only access vehicles assigned to drivers they manage OR unassigned vehicles
       if (currentUser.role === UserRole.MANAGER) {
         // First get all drivers that this manager manages
         const managedDrivers = await User.find({
@@ -116,7 +120,13 @@ export class VehicleController {
         }).select('_id');
         
         const managedDriverIds = managedDrivers.map(driver => driver._id);
-        vehicleQuery.driverId = { $in: managedDriverIds };
+        
+        // Allow vehicles assigned to managed drivers OR unassigned vehicles
+        vehicleQuery.$or = [
+          { driverId: { $in: managedDriverIds } }, // Vehicles assigned to managed drivers
+          { driverId: { $exists: false } },        // Unassigned vehicles (no driverId field)
+          { driverId: null }                       // Unassigned vehicles (driverId is null)
+        ];
       }
 
       const vehicle = await Vehicle.findOne(vehicleQuery).populate('driverId', 'firstName lastName email');
@@ -140,7 +150,7 @@ export class VehicleController {
       
       const response: ApiResponse<IVehicle> = {
         success: true,
-        data: vehicle,
+        data: vehicle.toJSON(), // Use toJSON to include virtual fields
         message: 'Vehicle retrieved successfully'
       };
       
@@ -220,7 +230,7 @@ export class VehicleController {
       
       const response: ApiResponse<IVehicle> = {
         success: true,
-        data: vehicle,
+        data: vehicle.toJSON(), // Use toJSON to include virtual fields
         message: 'Vehicle created successfully'
       };
       
@@ -242,7 +252,7 @@ export class VehicleController {
         companyId: currentUser.companyId
       };
 
-      // If user is a manager, ensure they can only update vehicles assigned to drivers they manage
+      // If user is a manager, ensure they can only update vehicles assigned to drivers they manage OR unassigned vehicles
       if (currentUser.role === UserRole.MANAGER) {
         // First get all drivers that this manager manages
         const managedDrivers = await User.find({
@@ -252,7 +262,13 @@ export class VehicleController {
         }).select('_id');
         
         const managedDriverIds = managedDrivers.map(driver => driver._id);
-        vehicleQuery.driverId = { $in: managedDriverIds };
+        
+        // Allow vehicles assigned to managed drivers OR unassigned vehicles
+        vehicleQuery.$or = [
+          { driverId: { $in: managedDriverIds } }, // Vehicles assigned to managed drivers
+          { driverId: { $exists: false } },        // Unassigned vehicles (no driverId field)
+          { driverId: null }                       // Unassigned vehicles (driverId is null)
+        ];
       }
 
       const vehicle = await Vehicle.findOne(vehicleQuery);
@@ -341,7 +357,7 @@ export class VehicleController {
       
       const response: ApiResponse<IVehicle> = {
         success: true,
-        data: vehicle,
+        data: vehicle.toJSON(), // Use toJSON to include virtual fields
         message: 'Vehicle updated successfully'
       };
       
@@ -385,6 +401,87 @@ export class VehicleController {
         success: true,
         data: null,
         message: 'Vehicle deactivated successfully'
+      };
+      
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  activateVehicle = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const currentUser = (req as any).user;
+
+      // Check permissions
+      if (currentUser.role === UserRole.DRIVER) {
+        return res.status(403).json({
+          success: false,
+          message: 'Drivers cannot activate vehicles'
+        });
+      }
+
+      const vehicle = await Vehicle.findOne({ 
+        _id: id,
+        companyId: currentUser.companyId
+      });
+
+      if (!vehicle) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vehicle not found'
+        });
+      }
+
+      // Activate vehicle
+      vehicle.status = 'active';
+      await vehicle.save();
+      
+      const response: ApiResponse<null> = {
+        success: true,
+        data: null,
+        message: 'Vehicle activated successfully'
+      };
+      
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  hardDeleteVehicle = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const currentUser = (req as any).user;
+
+      // Check permissions - managers and admins can hard delete
+      if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.MANAGER) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only managers and administrators can permanently delete vehicles'
+        });
+      }
+
+      const vehicle = await Vehicle.findOne({ 
+        _id: id,
+        companyId: currentUser.companyId
+      });
+
+      if (!vehicle) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vehicle not found'
+        });
+      }
+
+      // Hard delete - remove from database
+      await Vehicle.findByIdAndDelete(id);
+      
+      const response: ApiResponse<null> = {
+        success: true,
+        data: null,
+        message: 'Vehicle permanently deleted'
       };
       
       res.json(response);

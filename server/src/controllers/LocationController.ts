@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { LocationDatabaseService } from '../services/LocationDatabaseService';
+import { OdometerService } from '../services/OdometerService';
 import { createError } from '../middleware/errorHandler';
 import { ApiResponse } from '@fleet-management/shared';
 import { UserRole } from '../models/User';
 import { Device } from '../models/Device';
+import { broadcastLocationUpdate } from '../routes/locationEvents';
 
 export class LocationController {
 
@@ -14,6 +16,7 @@ export class LocationController {
       // Log location data to terminal (as requested)
       console.log('\n📍 LOCATION UPDATE RECEIVED:');
       console.log(`   Device: ${locationData.deviceId}`);
+      console.log(`   User ID: ${locationData.userId || 'Anonymous'}`);
       console.log(`   Coordinates: ${locationData.latitude}, ${locationData.longitude}`);
       console.log(`   Accuracy: ${locationData.accuracy}m`);
       console.log(`   Speed: ${locationData.speed || 'N/A'} m/s`);
@@ -24,6 +27,33 @@ export class LocationController {
 
       // Save to MongoDB
       const savedLocation = await LocationDatabaseService.saveLocationData(locationData);
+      
+      // Update vehicle odometer if user is assigned to a vehicle
+      if (locationData.userId) {
+        await OdometerService.updateOdometer(
+          locationData.deviceId,
+          locationData.userId,
+          {
+            latitude: locationData.latitude,
+            longitude: locationData.longitude,
+            timestamp: locationData.timestamp
+          }
+        );
+      }
+      
+      // Broadcast location update to connected clients
+      if (locationData.userId) {
+        broadcastLocationUpdate(locationData.userId, {
+          deviceId: locationData.deviceId,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          timestamp: locationData.timestamp,
+          accuracy: locationData.accuracy,
+          speed: locationData.speed,
+          bearing: locationData.bearing,
+          altitude: locationData.altitude
+        });
+      }
       
       const response: ApiResponse<any> = {
         success: true,
@@ -263,9 +293,8 @@ export class LocationController {
         });
       }
 
-      // Get location data
-      const targetDeviceId = deviceId as string || allowedDeviceIds[0];
-      if (!targetDeviceId) {
+      // Get location data for all devices (not just the first one)
+      if (allowedDeviceIds.length === 0) {
         return res.json({
           success: true,
           data: [],
@@ -273,12 +302,41 @@ export class LocationController {
         });
       }
 
-      const routes = await LocationDatabaseService.getDeviceDailyRoutes(targetDeviceId, date as string);
+      // If specific deviceId is requested, get routes for that device only
+      if (deviceId) {
+        const routes = await LocationDatabaseService.getDeviceDailyRoutes(deviceId as string, date as string);
+        
+        const response: ApiResponse<any> = {
+          success: true,
+          data: routes,
+          message: `Location data for device ${deviceId}`
+        };
+        
+        return res.json(response);
+      }
+
+      // Otherwise, get routes for all devices (like admin page does)
+      const allRoutes = [];
+      for (const deviceId of allowedDeviceIds) {
+        const deviceRoutes = await LocationDatabaseService.getDeviceDailyRoutes(deviceId, date as string);
+        console.log(`🔍 Driver routes for device ${deviceId}:`, deviceRoutes.length, 'routes');
+        allRoutes.push(...deviceRoutes);
+      }
+      
+      console.log(`🔍 Driver total routes:`, allRoutes.length);
+      console.log(`🔍 Driver routes data:`, allRoutes.map(r => ({
+        deviceId: r.deviceId,
+        totalDistance: r.totalDistance,
+        totalDuration: r.totalDuration,
+        totalPoints: r.totalPoints,
+        averageSpeed: r.averageSpeed,
+        maxSpeed: r.maxSpeed
+      })));
       
       const response: ApiResponse<any> = {
         success: true,
-        data: routes,
-        message: `Location data for device ${targetDeviceId}`
+        data: allRoutes,
+        message: `Location data for ${allowedDeviceIds.length} device(s)`
       };
 
       res.json(response);
@@ -295,5 +353,66 @@ export class LocationController {
       isActive: true 
     });
     return managedUsers.map(user => (user._id as any).toString());
+  };
+
+  // New method: Get current odometer reading for a user's vehicle
+  getCurrentOdometer = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const currentUser = (req as any).user;
+      
+      const odometerReading = await OdometerService.getOdometerForUser(currentUser._id);
+      
+      if (odometerReading === null) {
+        return res.status(404).json({
+          success: false,
+          message: 'No vehicle assigned to user'
+        });
+      }
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: { odometer: odometerReading },
+        message: 'Current odometer reading retrieved successfully'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // New method: Set odometer reading (for maintenance/corrections)
+  setOdometer = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const currentUser = (req as any).user;
+      const { vehicleId, newReading } = req.body;
+
+      // Check if user has permission to update this vehicle
+      if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.MANAGER) {
+        return res.status(403).json({
+          success: false,
+          message: 'Insufficient permissions to update odometer'
+        });
+      }
+
+      const success = await OdometerService.setOdometer(vehicleId, newReading);
+      
+      if (!success) {
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to update odometer reading'
+        });
+      }
+
+      const response: ApiResponse<any> = {
+        success: true,
+        data: { odometer: newReading },
+        message: 'Odometer reading updated successfully'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
   };
 }

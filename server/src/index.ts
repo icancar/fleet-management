@@ -11,6 +11,9 @@ import { driverRoutes } from './routes/drivers';
 import { dashboardRoutes } from './routes/dashboard';
 import { vehicleDataRoutes } from './routes/vehicleData';
 import { locationRoutes } from './routes/location';
+import locationEventsRoutes from './routes/locationEvents';
+import { managerRoutesRoutes } from './routes/managerRoutes';
+import { adminRoutesRoutes } from './routes/adminRoutes';
 import { connectDatabase } from './config/database';
 
 // Load environment variables
@@ -48,7 +51,10 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/vehicle-data', vehicleDataRoutes);
+app.use('/api/location', locationEventsRoutes); // SSE routes must come first
 app.use('/api/location', locationRoutes);
+app.use('/api/manager-routes', managerRoutesRoutes);
+app.use('/api/admin-routes', adminRoutesRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { validateRequest } from '../middleware/validation';
+import { authenticateToken, requireDriver } from '../middleware/auth';
 import { LocationController } from '../controllers/LocationController';
 
 const router = Router();
@@ -36,6 +37,9 @@ router.get('/routes/all', locationController.getAllDailyRoutes);
 // GET /api/location/routes/device/:deviceId - Get daily routes for specific device
 router.get('/routes/device/:deviceId', locationController.getDeviceDailyRoutes);
 
+// GET /api/location/routes/my - Get current user's routes (with access control)
+router.get('/routes/my', authenticateToken, requireDriver, locationController.getLocationDataWithAccessControl);
+
 // GET /api/location/routes/stats/:deviceId - Get route statistics for specific device
 router.get('/routes/stats/:deviceId', locationController.getDeviceRouteStats);
 
@@ -46,5 +50,13 @@ router.get('/devices', locationController.getAllDevices);
 
 // GET /api/location/devices/:deviceId/stats - Get device statistics
 router.get('/devices/:deviceId/stats', locationController.getDeviceStats);
+
+// NEW ODOMETER MANAGEMENT ENDPOINTS
+
+// GET /api/location/odometer/current - Get current odometer reading for user's vehicle
+router.get('/odometer/current', authenticateToken, locationController.getCurrentOdometer);
+
+// POST /api/location/odometer/set - Set odometer reading (admin/manager only)
+router.post('/odometer/set', authenticateToken, locationController.setOdometer);
 
 export { router as locationRoutes };

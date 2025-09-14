@@ -25,14 +25,6 @@ const validateLogin = [
   validateRequest
 ];
 
-const validateCompanyOwner = [
-  body('company.name').isLength({ min: 2 }).withMessage('Company name is required'),
-  body('owner.email').isEmail().withMessage('Valid email is required'),
-  body('owner.password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('owner.firstName').isLength({ min: 2 }).withMessage('First name is required'),
-  body('owner.lastName').isLength({ min: 2 }).withMessage('Last name is required'),
-  validateRequest
-];
 
 const validatePasswordChange = [
   body('currentPassword').notEmpty().withMessage('Current password is required'),
@@ -62,7 +54,6 @@ const validateProfileUpdate = [
 // Public routes
 router.post('/register', validateRegister, authController.register);
 router.post('/login', validateLogin, authController.login);
-router.post('/create-company', validateCompanyOwner, authController.createCompanyWithOwner);
 
 // Protected routes
 router.get('/me', authenticateToken, authController.getMe);

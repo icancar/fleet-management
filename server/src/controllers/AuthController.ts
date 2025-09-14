@@ -55,26 +55,6 @@ export class AuthController {
     }
   };
 
-  /**
-   * Create company with owner
-   */
-  createCompanyWithOwner = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { company, owner } = req.body;
-
-      const result = await AuthService.createCompanyWithOwner(company, owner);
-
-      const response: ApiResponse<any> = {
-        success: true,
-        data: result,
-        message: 'Company and owner created successfully'
-      };
-
-      res.status(201).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
 
   /**
    * Get current user profile

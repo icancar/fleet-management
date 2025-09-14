@@ -31,6 +31,7 @@ const getNavigation = (userRole: UserRole) => {
       return [
         ...baseNavigation,
         { name: 'My Vehicle', href: '/vehicles', icon: Car },
+        { name: 'My Routes', href: '/routes', icon: Route },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
     case UserRole.MANAGER:
@@ -38,6 +39,7 @@ const getNavigation = (userRole: UserRole) => {
         ...baseNavigation,
         { name: 'Drivers', href: '/drivers', icon: Users },
         { name: 'Vehicles', href: '/vehicles', icon: Car },
+        { name: 'Driver Routes', href: '/manager-routes', icon: Route },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
     case UserRole.ADMIN:
@@ -45,6 +47,7 @@ const getNavigation = (userRole: UserRole) => {
         ...baseNavigation,
         { name: 'Employees', href: '/drivers', icon: Users },
         { name: 'Vehicles', href: '/vehicles', icon: Car },
+        { name: 'All Driver Routes', href: '/admin-routes', icon: Route },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
     default:

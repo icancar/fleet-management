@@ -64,10 +64,7 @@ const UserSchema = new Schema<IUser>({
   },
   companyId: {
     type: String,
-    required: function(this: IUser) {
-      // Company ID is required for all roles
-      return true;
-    }
+    required: false
   },
   managerId: {
     type: Schema.Types.ObjectId,
