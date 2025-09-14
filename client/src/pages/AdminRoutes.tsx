@@ -328,12 +328,34 @@ const AdminRoutes: React.FC = () => {
       selectedDriver: selectedDriver?.firstName
     });
     
-    if (mapInstanceRef.current && mapRef.current && driverRoutes.length > 0) {
-      console.log('Drawing routes for selected driver');
-      // Add a small delay to ensure the map is fully rendered
-      setTimeout(() => {
-        drawRoutesOnMap();
-      }, 50);
+    if (mapInstanceRef.current && mapRef.current) {
+      if (driverRoutes.length > 0) {
+        console.log('Drawing routes for selected driver');
+        // Add a small delay to ensure the map is fully rendered
+        setTimeout(() => {
+          drawRoutesOnMap();
+        }, 50);
+      } else {
+        console.log('No routes available, clearing map layers');
+        // Clear existing layers when no routes
+        try {
+          mapInstanceRef.current.eachLayer((layer: any) => {
+            if (layer instanceof window.L.Polyline || layer instanceof window.L.Marker) {
+              try {
+                if (layer._map && mapInstanceRef.current.hasLayer(layer)) {
+                  mapInstanceRef.current.removeLayer(layer);
+                }
+              } catch (error) {
+                console.warn('Error removing layer:', error);
+              }
+            }
+          });
+        } catch (error) {
+          console.warn('Error clearing map layers:', error);
+        }
+        // Reset map to default center
+        mapInstanceRef.current.setView([44.7865, 20.4489], 13);
+      }
     }
   }, [driverRoutes, isInitialLoad, userHasInteracted]);
 
@@ -473,11 +495,21 @@ const AdminRoutes: React.FC = () => {
     });
     
     // Clear existing layers (but keep the base map)
-    mapInstanceRef.current.eachLayer((layer: any) => {
-      if (layer instanceof window.L.Polyline || layer instanceof window.L.Marker) {
-        mapInstanceRef.current.removeLayer(layer);
-      }
-    });
+    try {
+      mapInstanceRef.current.eachLayer((layer: any) => {
+        if (layer instanceof window.L.Polyline || layer instanceof window.L.Marker) {
+          try {
+            if (layer._map && mapInstanceRef.current.hasLayer(layer)) {
+              mapInstanceRef.current.removeLayer(layer);
+            }
+          } catch (error) {
+            console.warn('Error removing layer:', error);
+          }
+        }
+      });
+    } catch (error) {
+      console.warn('Error clearing map layers:', error);
+    }
 
     // Draw all routes for the selected driver
     driverRoutes.forEach((route, index) => {
@@ -485,7 +517,26 @@ const AdminRoutes: React.FC = () => {
         console.log(`Drawing route ${index + 1} with ${route.routePoints.length} points`);
         
         const points = route.routePoints;
-        const routePoints = points.map(point => [point.latitude, point.longitude]);
+        
+        // Validate and filter route points
+        const validPoints = points.filter(point => 
+          point && 
+          typeof point.latitude === 'number' && 
+          typeof point.longitude === 'number' &&
+          !isNaN(point.latitude) && 
+          !isNaN(point.longitude) &&
+          point.latitude >= -90 && 
+          point.latitude <= 90 &&
+          point.longitude >= -180 && 
+          point.longitude <= 180
+        );
+        
+        if (validPoints.length < 2) {
+          console.warn(`Route ${index + 1} has insufficient valid points: ${validPoints.length}`);
+          return;
+        }
+        
+        const routePoints = validPoints.map(point => [point.latitude, point.longitude]);
         
         try {
           // Create polyline with different colors for different devices
@@ -500,11 +551,11 @@ const AdminRoutes: React.FC = () => {
           
           // Add start marker
           const startMarker = window.L.marker(routePoints[0]).addTo(mapInstanceRef.current)
-            .bindPopup(`<b>Start - ${route.vehicleInfo.licensePlate}</b><br>${formatTime(points[0].timestamp)}`);
+            .bindPopup(`<b>Start - ${selectedDriver?.vehicle?.licensePlate || 'N/A'}</b><br>${formatTime(points[0].timestamp)}`);
           
           // Add end marker
           const endMarker = window.L.marker(routePoints[routePoints.length - 1]).addTo(mapInstanceRef.current)
-            .bindPopup(`<b>End - ${route.vehicleInfo.licensePlate}</b><br>${formatTime(points[points.length - 1].timestamp)}`);
+            .bindPopup(`<b>End - ${selectedDriver?.vehicle?.licensePlate || 'N/A'}</b><br>${formatTime(points[points.length - 1].timestamp)}`);
           
           // Store references
           if (!window.currentPolyline) window.currentPolyline = [];
@@ -521,25 +572,42 @@ const AdminRoutes: React.FC = () => {
     if (driverRoutes.some(route => route.routePoints && route.routePoints.length > 0)) {
       const allPoints: [number, number][] = [];
       
-      // Collect all route points for bounds calculation
+      // Collect all valid route points for bounds calculation
       driverRoutes.forEach(route => {
         if (route.routePoints && route.routePoints.length > 0) {
           route.routePoints.forEach(point => {
-            allPoints.push([point.latitude, point.longitude]);
+            // Validate coordinates before adding to bounds
+            if (point && 
+                typeof point.latitude === 'number' && 
+                typeof point.longitude === 'number' &&
+                !isNaN(point.latitude) && 
+                !isNaN(point.longitude) &&
+                point.latitude >= -90 && 
+                point.latitude <= 90 &&
+                point.longitude >= -180 && 
+                point.longitude <= 180) {
+              allPoints.push([point.latitude, point.longitude]);
+            }
           });
         }
       });
       
       if (allPoints.length > 0) {
         try {
-          // Create a bounds object from all points
+          // Create a bounds object from all valid points
           const bounds = window.L.latLngBounds(allPoints);
           
-          // Force fit bounds immediately
-          mapInstanceRef.current.fitBounds(bounds, {
-            padding: [20, 20],
-            maxZoom: 18 // Prevent zooming in too much
-          });
+          // Validate bounds before using
+          if (bounds && bounds.isValid && bounds.isValid()) {
+            // Force fit bounds immediately
+            mapInstanceRef.current.fitBounds(bounds, {
+              padding: [20, 20],
+              maxZoom: 18 // Prevent zooming in too much
+            });
+          } else {
+            console.warn('Invalid bounds created, using default view');
+            mapInstanceRef.current.setView([44.7865, 20.4489], 13);
+          }
           
           console.log('Map automatically focused on route endpoints', {
             pointCount: allPoints.length,
@@ -549,7 +617,7 @@ const AdminRoutes: React.FC = () => {
           
           // Ensure the map is properly rendered
           setTimeout(() => {
-            if (mapInstanceRef.current) {
+            if (mapInstanceRef.current && bounds && bounds.isValid && bounds.isValid()) {
               mapInstanceRef.current.invalidateSize();
               mapInstanceRef.current.fitBounds(bounds, {
                 padding: [20, 20],

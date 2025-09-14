@@ -59,81 +59,94 @@ const Routes: React.FC = () => {
     // Removed success notification for connection to avoid annoying popups
   }, [sseError, showNotification]);
 
+  // Initialize map function
+  const initializeMap = () => {
+    if (mapRef.current && window.L && !mapInstanceRef.current) {
+      // Check if the container already has a map
+      if (mapRef.current._leaflet_id) {
+        console.warn('Map container already has a map, skipping initialization');
+        return;
+      }
+      
+      try {
+        console.log('Initializing map...');
+        
+        // Calculate initial center from route data if available
+        let initialCenter: [number, number] = [44.7865, 20.4489]; // Default to Belgrade
+        let initialZoom = 15;
+        
+        if (routes.length > 0) {
+          const allPoints: [number, number][] = [];
+          routes.forEach(route => {
+            if (route.routePoints && route.routePoints.length > 0) {
+              route.routePoints.forEach(point => {
+                allPoints.push([point.latitude, point.longitude]);
+              });
+            }
+          });
+          
+          if (allPoints.length > 0) {
+            // Calculate center from route points
+            const avgLat = allPoints.reduce((sum, point) => sum + point[0], 0) / allPoints.length;
+            const avgLon = allPoints.reduce((sum, point) => sum + point[1], 0) / allPoints.length;
+            initialCenter = [avgLat, avgLon];
+            initialZoom = 15; // Closer zoom for route data
+          }
+        }
+        
+        // Initialize map with calculated center
+        mapInstanceRef.current = window.L.map(mapRef.current).setView(initialCenter, initialZoom);
+        
+        // Add CartoDB tiles (consistent with Android app)
+        window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+          maxZoom: 20,
+          subdomains: 'abcd',
+          userAgent: 'FleetManagement/1.0'
+        }).addTo(mapInstanceRef.current);
+        
+        console.log('Map initialized successfully with center:', initialCenter);
+        setMapLoading(false);
+        setMapError(null);
+        
+        // Add event listeners to track user interaction
+        mapInstanceRef.current.on('zoomend', () => {
+          setUserHasInteracted(true);
+        });
+        
+        mapInstanceRef.current.on('moveend', () => {
+          setUserHasInteracted(true);
+        });
+        
+        // Trigger map resize after a short delay to ensure proper rendering
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+            
+            // Draw routes immediately after map initialization if we have data
+            if (routes.length > 0) {
+              setTimeout(() => {
+                drawRoutesOnMap();
+              }, 100);
+            }
+          }
+        }, 200);
+      } catch (error) {
+        console.error('Error initializing map:', error);
+        setMapError('Failed to initialize map');
+        setMapLoading(false);
+      }
+    }
+  };
+
   // Load Leaflet.js and initialize map
   useEffect(() => {
     let isMounted = true;
     console.log('Map useEffect triggered, mapRef.current:', mapRef.current);
 
-    const initializeMap = () => {
-      if (isMounted && mapRef.current && window.L && !mapInstanceRef.current) {
-        try {
-          console.log('Initializing map...');
-          
-          // Calculate initial center from route data if available
-          let initialCenter: [number, number] = [44.7865, 20.4489]; // Default to Belgrade
-          let initialZoom = 15;
-          
-          if (routes.length > 0) {
-            const allPoints: [number, number][] = [];
-            routes.forEach(route => {
-              if (route.routePoints && route.routePoints.length > 0) {
-                route.routePoints.forEach(point => {
-                  allPoints.push([point.latitude, point.longitude]);
-                });
-              }
-            });
-            
-            if (allPoints.length > 0) {
-              // Calculate center from route points
-              const avgLat = allPoints.reduce((sum, point) => sum + point[0], 0) / allPoints.length;
-              const avgLon = allPoints.reduce((sum, point) => sum + point[1], 0) / allPoints.length;
-              initialCenter = [avgLat, avgLon];
-              initialZoom = 15; // Closer zoom for route data
-            }
-          }
-          
-          // Initialize map with calculated center
-          mapInstanceRef.current = window.L.map(mapRef.current).setView(initialCenter, initialZoom);
-          
-          // Add CartoDB tiles (consistent with Android app)
-          window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-            maxZoom: 20,
-            subdomains: 'abcd',
-            userAgent: 'FleetManagement/1.0'
-          }).addTo(mapInstanceRef.current);
-          
-          console.log('Map initialized successfully with center:', initialCenter);
-          setMapLoading(false);
-          setMapError(null);
-          
-          // Add event listeners to track user interaction
-          mapInstanceRef.current.on('zoomend', () => {
-            setUserHasInteracted(true);
-          });
-          
-          mapInstanceRef.current.on('moveend', () => {
-            setUserHasInteracted(true);
-          });
-          
-          // Trigger map resize after a short delay to ensure proper rendering
-          setTimeout(() => {
-            if (mapInstanceRef.current) {
-              mapInstanceRef.current.invalidateSize();
-              
-              // Draw routes immediately after map initialization if we have data
-              if (routes.length > 0) {
-                setTimeout(() => {
-                  drawRoutesOnMap();
-                }, 100);
-              }
-            }
-          }, 200);
-        } catch (error) {
-          console.error('Error initializing map:', error);
-          setMapError('Failed to initialize map');
-          setMapLoading(false);
-        }
+    const initializeMapWrapper = () => {
+      if (isMounted) {
+        initializeMap();
       }
     };
 
@@ -172,16 +185,61 @@ const Routes: React.FC = () => {
     };
   }, [routes]);
 
+  // Initialize map when component mounts and mapRef is available
+  useEffect(() => {
+    if (mapRef.current && window.L && !mapInstanceRef.current) {
+      console.log('MapRef available, initializing map');
+      initializeMap();
+    }
+    
+    // Cleanup function to destroy map when component unmounts
+    return () => {
+      if (mapInstanceRef.current) {
+        console.log('Cleaning up map instance');
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [mapRef.current]);
+
   // Draw routes when routes are updated
   useEffect(() => {
     console.log('Routes changed, routes:', routes);
     
-    if (mapInstanceRef.current && mapRef.current && routes.length > 0) {
-      console.log('Drawing routes for driver');
-      // Add a small delay to ensure the map is fully rendered
-      setTimeout(() => {
-        drawRoutesOnMap();
-      }, 50);
+    if (mapInstanceRef.current && mapRef.current) {
+      if (routes.length > 0) {
+        console.log('Drawing routes for driver');
+        // Force map refresh to ensure it's visible
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 10);
+        // Add a small delay to ensure the map is fully rendered
+        setTimeout(() => {
+          drawRoutesOnMap();
+        }, 50);
+      } else {
+        console.log('No routes available, clearing map layers');
+        // Clear existing layers when no routes
+        try {
+          mapInstanceRef.current.eachLayer((layer: any) => {
+            if (layer instanceof window.L.Polyline || layer instanceof window.L.Marker) {
+              try {
+                if (layer._map && mapInstanceRef.current.hasLayer(layer)) {
+                  mapInstanceRef.current.removeLayer(layer);
+                }
+              } catch (error) {
+                console.warn('Error removing layer:', error);
+              }
+            }
+          });
+        } catch (error) {
+          console.warn('Error clearing map layers:', error);
+        }
+        // Reset map to default center
+        mapInstanceRef.current.setView([44.7865, 20.4489], 13);
+      }
     }
   }, [routes]);
 
@@ -336,25 +394,6 @@ const Routes: React.FC = () => {
   };
 
 
-  const getDateOptions = () => {
-    const options = [];
-    const today = new Date();
-    
-    // Generate options for the last 7 days
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateString = date.toISOString().split('T')[0];
-      const displayDate = date.toLocaleDateString('en-GB', { 
-        weekday: 'short', 
-        day: 'numeric', 
-        month: 'short' 
-      });
-      options.push({ value: dateString, label: displayDate });
-    }
-    
-    return options;
-  };
 
   const getMapBounds = () => {
     if (routes.length === 0 || routes[0].routePoints.length === 0) {
@@ -398,12 +437,16 @@ const Routes: React.FC = () => {
 
   // Function to draw routes on the map
   const drawRoutesOnMap = () => {
-    if (!mapInstanceRef.current || !mapRef.current || routes.length === 0) {
+    if (!mapInstanceRef.current || !mapRef.current) {
       console.log('Cannot draw routes - missing requirements:', {
         hasMapInstance: !!mapInstanceRef.current,
-        hasMapRef: !!mapRef.current,
-        routesLength: routes.length
+        hasMapRef: !!mapRef.current
       });
+      return;
+    }
+    
+    if (routes.length === 0) {
+      console.log('No routes to draw');
       return;
     }
     
@@ -414,11 +457,21 @@ const Routes: React.FC = () => {
     });
     
     // Clear existing layers (but keep the base map)
-    mapInstanceRef.current.eachLayer((layer: any) => {
-      if (layer instanceof window.L.Polyline || layer instanceof window.L.Marker) {
-        mapInstanceRef.current.removeLayer(layer);
-      }
-    });
+    try {
+      mapInstanceRef.current.eachLayer((layer: any) => {
+        if (layer instanceof window.L.Polyline || layer instanceof window.L.Marker) {
+          try {
+            if (layer._map && mapInstanceRef.current.hasLayer(layer)) {
+              mapInstanceRef.current.removeLayer(layer);
+            }
+          } catch (error) {
+            console.warn('Error removing layer:', error);
+          }
+        }
+      });
+    } catch (error) {
+      console.warn('Error clearing map layers:', error);
+    }
 
     // Initialize arrays for storing references
     window.currentPolyline = [];
@@ -430,7 +483,26 @@ const Routes: React.FC = () => {
         console.log(`Drawing route ${index + 1} with ${route.routePoints.length} points`);
         
         const points = route.routePoints;
-        const routePoints = points.map(point => [point.latitude, point.longitude]);
+        
+        // Validate and filter route points
+        const validPoints = points.filter(point => 
+          point && 
+          typeof point.latitude === 'number' && 
+          typeof point.longitude === 'number' &&
+          !isNaN(point.latitude) && 
+          !isNaN(point.longitude) &&
+          point.latitude >= -90 && 
+          point.latitude <= 90 &&
+          point.longitude >= -180 && 
+          point.longitude <= 180
+        );
+        
+        if (validPoints.length < 2) {
+          console.warn(`Route ${index + 1} has insufficient valid points: ${validPoints.length}`);
+          return;
+        }
+        
+        const routePoints = validPoints.map(point => [point.latitude, point.longitude]);
         
         try {
           // Create polyline
@@ -472,22 +544,33 @@ const Routes: React.FC = () => {
     if (routes.some(route => route.routePoints && route.routePoints.length > 0)) {
       const allPoints: [number, number][] = [];
       
-      // Collect all route points for bounds calculation
+      // Collect all valid route points for bounds calculation
       routes.forEach(route => {
         if (route.routePoints && route.routePoints.length > 0) {
           route.routePoints.forEach(point => {
-            allPoints.push([point.latitude, point.longitude]);
+            // Validate coordinates before adding to bounds
+            if (point && 
+                typeof point.latitude === 'number' && 
+                typeof point.longitude === 'number' &&
+                !isNaN(point.latitude) && 
+                !isNaN(point.longitude) &&
+                point.latitude >= -90 && 
+                point.latitude <= 90 &&
+                point.longitude >= -180 && 
+                point.longitude <= 180) {
+              allPoints.push([point.latitude, point.longitude]);
+            }
           });
         }
       });
       
       if (allPoints.length > 0) {
         try {
-          // Create a bounds object from all points
+          // Create a bounds object from all valid points
           const bounds = window.L.latLngBounds(allPoints);
           
           // Only fit bounds on initial load or if user hasn't interacted with the map
-          if (isInitialLoad) {
+          if (isInitialLoad && !userHasInteracted) {
             mapInstanceRef.current.fitBounds(bounds, {
               padding: [20, 20],
               maxZoom: 18 // Prevent zooming in too much
@@ -503,10 +586,13 @@ const Routes: React.FC = () => {
             setTimeout(() => {
               if (mapInstanceRef.current) {
                 mapInstanceRef.current.invalidateSize();
-                mapInstanceRef.current.fitBounds(bounds, {
-                  padding: [20, 20],
-                  maxZoom: 18
-                });
+                // Double-check user hasn't interacted during the delay
+                if (!userHasInteracted && bounds && bounds.isValid && bounds.isValid()) {
+                  mapInstanceRef.current.fitBounds(bounds, {
+                    padding: [20, 20],
+                    maxZoom: 18
+                  });
+                }
               }
             }, 100);
             
@@ -592,17 +678,12 @@ const Routes: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Date
             </label>
-            <select
+            <input
+              type="date"
               value={selectedDate}
               onChange={(e) => handleDateChange(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {getDateOptions().map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           
         </div>
@@ -671,13 +752,6 @@ const Routes: React.FC = () => {
           <div className="h-96 flex items-center justify-center">
             <div className="text-gray-500">Loading map...</div>
           </div>
-        ) : routes.length === 0 ? (
-          <div className="h-96 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-gray-500 text-lg mb-2">No routes found for this date</div>
-              <div className="text-gray-400 text-sm">Try selecting a different date</div>
-            </div>
-          </div>
         ) : (
           <div className="h-96 relative">
             {/* Map with route path visualization using Leaflet.js like Android app */}
@@ -741,7 +815,15 @@ const Routes: React.FC = () => {
                 </button>
                   </div>
 
-
+                  {/* No routes overlay */}
+                  {!loading && routes.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+                      <div className="text-center">
+                        <div className="text-gray-500 text-lg mb-2">No routes found for this date</div>
+                        <div className="text-gray-400 text-sm">Try selecting a different date</div>
+                      </div>
+                    </div>
+                  )}
                 
                     </div>
                   </div>
