@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createError } from '../middleware/errorHandler';
 import { ApiResponse } from '@fleet-management/shared';
+import { NotificationService } from '../services/NotificationService';
 
 interface Maintenance {
   id: string;
@@ -58,6 +59,7 @@ export class MaintenanceController {
       };
       
       maintenance.push(newRecord);
+      
       
       const response: ApiResponse<Maintenance> = {
         success: true,

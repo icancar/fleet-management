@@ -31,6 +31,9 @@
     <color name="black">#000000</color>
     <color name="white">#FFFFFF</color>
     
+    <!-- Notification Colors -->
+    <color name="colorPrimary">#3B82F6</color>
+    
     <!-- Legacy colors for compatibility -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#3B82F6</color>

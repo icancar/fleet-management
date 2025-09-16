@@ -51,6 +51,11 @@ const validateProfileUpdate = [
   validateRequest
 ];
 
+const validateFCMToken = [
+  body('fcmToken').notEmpty().withMessage('FCM token is required'),
+  validateRequest
+];
+
 // Public routes
 router.post('/register', validateRegister, authController.register);
 router.post('/login', validateLogin, authController.login);
@@ -60,5 +65,6 @@ router.get('/me', authenticateToken, authController.getMe);
 router.get('/profile', authenticateToken, authController.getProfile);
 router.put('/profile', authenticateToken, validateProfileUpdate, authController.updateProfile);
 router.put('/change-password', authenticateToken, validatePasswordChange, authController.changePassword);
+router.post('/fcm-token', authenticateToken, validateFCMToken, authController.registerFCMToken);
 
 export { router as authRoutes };

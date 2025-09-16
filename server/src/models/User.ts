@@ -17,6 +17,7 @@ export interface IUser extends Document {
   avatar?: string;
   companyId?: string;
   managerId?: mongoose.Types.ObjectId; // For managers and drivers - who manages them
+  fcmToken?: string; // Firebase Cloud Messaging token for push notifications
   createdAt: Date;
   updatedAt: Date;
   lastLogin?: Date;
@@ -91,6 +92,10 @@ const UserSchema = new Schema<IUser>({
       },
       message: 'Invalid manager assignment: Managers must report to Admin, Drivers must report to Manager'
     }
+  },
+  fcmToken: {
+    type: String,
+    sparse: true // Allows multiple null values but enforces uniqueness for non-null values
   },
   lastLogin: {
     type: Date

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import { User, UserRole } from '@shared/types';
-import { ChevronDown, ChevronRight, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, X, Bell, Send } from 'lucide-react';
 
 interface DriverFormData {
   email: string;
@@ -23,6 +23,14 @@ interface ManagerFormData {
   phone: string;
 }
 
+interface NotificationFormData {
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'error' | 'success';
+  targetType: 'all' | 'specific';
+  selectedDrivers: string[];
+}
+
 export const Drivers: React.FC = () => {
   const { user } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
@@ -31,8 +39,10 @@ export const Drivers: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showManagerModal, setShowManagerModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [editingDriver, setEditingDriver] = useState<User | null>(null);
   const [editingManager, setEditingManager] = useState<User | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<User | null>(null);
   const [managersCollapsed, setManagersCollapsed] = useState(false);
   const [driversCollapsed, setDriversCollapsed] = useState(false);
   const [managersSearchTerm, setManagersSearchTerm] = useState('');
@@ -53,6 +63,13 @@ export const Drivers: React.FC = () => {
     firstName: '',
     lastName: '',
     phone: ''
+  });
+  const [notificationData, setNotificationData] = useState<NotificationFormData>({
+    title: '',
+    message: '',
+    type: 'info',
+    targetType: 'all',
+    selectedDrivers: []
   });
 
   const canManageDrivers = user?.role === UserRole.MANAGER || user?.role === UserRole.ADMIN;
@@ -385,6 +402,117 @@ export const Drivers: React.FC = () => {
     setShowModal(true);
   };
 
+  const openNotificationModal = () => {
+    setSelectedDriver(null);
+    setNotificationData({
+      title: '',
+      message: '',
+      type: 'info',
+      targetType: 'all',
+      selectedDrivers: []
+    });
+    setShowNotificationModal(true);
+  };
+
+  const handleNotificationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!notificationData.title.trim() || !notificationData.message.trim()) {
+      showError('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (notificationData.targetType === 'specific' && notificationData.selectedDrivers.length === 0) {
+      showError('Error', 'Please select at least one driver');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      if (notificationData.targetType === 'all') {
+        // Send to all drivers
+        const response = await fetch('/api/notifications', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: notificationData.title.trim(),
+            message: notificationData.message.trim(),
+            type: notificationData.type
+            // No userId means send to all drivers
+          })
+        });
+
+        if (response.ok) {
+          showSuccess('Success', 'Notification sent to all drivers!');
+          setShowNotificationModal(false);
+          setNotificationData({ title: '', message: '', type: 'info', targetType: 'all', selectedDrivers: [] });
+        } else {
+          const errorData = await response.json();
+          showError('Error', errorData.message || 'Failed to send notification');
+        }
+      } else {
+        // Send to specific drivers
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const driverId of notificationData.selectedDrivers) {
+          try {
+            const response = await fetch('/api/notifications', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                title: notificationData.title.trim(),
+                message: notificationData.message.trim(),
+                type: notificationData.type,
+                userId: driverId
+              })
+            });
+
+            if (response.ok) {
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (error) {
+            errorCount++;
+          }
+        }
+
+        if (errorCount === 0) {
+          showSuccess('Success', `Notification sent to ${successCount} driver(s)!`);
+        } else {
+          showError('Partial Success', `Sent to ${successCount} driver(s), failed for ${errorCount} driver(s)`);
+        }
+        
+        setShowNotificationModal(false);
+        setNotificationData({ title: '', message: '', type: 'info', targetType: 'all', selectedDrivers: [] });
+      }
+    } catch (error) {
+      showError('Error', 'Failed to send notification');
+    }
+  };
+
+  const handleDriverSelection = (driverId: string, checked: boolean) => {
+    if (checked) {
+      setNotificationData(prev => ({
+        ...prev,
+        selectedDrivers: [...prev.selectedDrivers, driverId]
+      }));
+    } else {
+      setNotificationData(prev => ({
+        ...prev,
+        selectedDrivers: prev.selectedDrivers.filter(id => id !== driverId)
+      }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -576,12 +704,21 @@ export const Drivers: React.FC = () => {
               </div>
             </div>
             {canManageDrivers && (
-              <button
-                onClick={openCreateModal}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Add Driver
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={openNotificationModal}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
+                >
+                  <Bell className="h-4 w-4 mr-2" />
+                  Send Notification
+                </button>
+                <button
+                  onClick={openCreateModal}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Add Driver
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -896,6 +1033,142 @@ export const Drivers: React.FC = () => {
                     className="px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700"
                   >
                     {editingManager ? 'Update' : 'Create'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Modal */}
+      {showNotificationModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Send Notification
+                </h3>
+                <button
+                  onClick={() => setShowNotificationModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              <form onSubmit={handleNotificationSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Target
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="all"
+                        checked={notificationData.targetType === 'all'}
+                        onChange={(e) => setNotificationData({ ...notificationData, targetType: e.target.value as 'all' | 'specific', selectedDrivers: [] })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm text-gray-700">All Drivers</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        value="specific"
+                        checked={notificationData.targetType === 'specific'}
+                        onChange={(e) => setNotificationData({ ...notificationData, targetType: e.target.value as 'all' | 'specific' })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm text-gray-700">Specific Drivers</span>
+                    </label>
+                  </div>
+                </div>
+
+                {notificationData.targetType === 'specific' && (
+                  <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md p-3">
+                    <div className="space-y-2">
+                      {filteredDrivers.map((driver) => (
+                        <label key={driver._id} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={notificationData.selectedDrivers.includes(driver._id)}
+                            onChange={(e) => handleDriverSelection(driver._id, e.target.checked)}
+                            className="mr-2"
+                          />
+                          <span className="text-sm text-gray-700">
+                            {driver.firstName} {driver.lastName} ({driver.email})
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    {notificationData.selectedDrivers.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        {notificationData.selectedDrivers.length} driver(s) selected
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Alert Level
+                  </label>
+                  <select
+                    value={notificationData.type}
+                    onChange={(e) => setNotificationData({ ...notificationData, type: e.target.value as any })}
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="info">Info</option>
+                    <option value="success">Success</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={notificationData.title}
+                    onChange={(e) => setNotificationData({ ...notificationData, title: e.target.value })}
+                    placeholder="Enter notification title"
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Message *
+                  </label>
+                  <textarea
+                    value={notificationData.message}
+                    onChange={(e) => setNotificationData({ ...notificationData, message: e.target.value })}
+                    placeholder="Enter notification message"
+                    rows={4}
+                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowNotificationModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 flex items-center"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Send Notification
                   </button>
                 </div>
               </form>

@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '@shared/types';
 import { cn } from '../utils/cn';
+import { useNotificationCountContext } from '../contexts/NotificationCountContext';
 
 const getNavigation = (userRole: UserRole) => {
   const baseNavigation = [
@@ -32,6 +33,7 @@ const getNavigation = (userRole: UserRole) => {
         ...baseNavigation,
         { name: 'My Vehicle', href: '/vehicles', icon: Car },
         { name: 'My Routes', href: '/routes', icon: Route },
+        { name: 'Notifications', href: '/notifications', icon: Bell },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
     case UserRole.MANAGER:
@@ -40,6 +42,7 @@ const getNavigation = (userRole: UserRole) => {
         { name: 'Drivers', href: '/drivers', icon: Users },
         { name: 'Vehicles', href: '/vehicles', icon: Car },
         { name: 'Driver Routes', href: '/manager-routes', icon: Route },
+        { name: 'Notifications', href: '/notifications', icon: Bell },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
     case UserRole.ADMIN:
@@ -48,6 +51,7 @@ const getNavigation = (userRole: UserRole) => {
         { name: 'Employees', href: '/drivers', icon: Users },
         { name: 'Vehicles', href: '/vehicles', icon: Car },
         { name: 'All Driver Routes', href: '/admin-routes', icon: Route },
+        { name: 'Notifications', href: '/notifications', icon: Bell },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
     default:
@@ -60,6 +64,7 @@ export const Layout: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { unreadCount } = useNotificationCountContext();
 
   const navigation = user ? getNavigation(user.role) : [];
 
@@ -110,7 +115,12 @@ export const Layout: React.FC = () => {
                         'mr-4 flex-shrink-0 h-6 w-6'
                       )}
                     />
-                    {item.name}
+                    <span className="flex-1">{item.name}</span>
+                    {item.name === 'Notifications' && unreadCount > 0 && (
+                      <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                        {unreadCount}
+                      </span>
+                    )}
                   </a>
                 );
               })}
@@ -147,7 +157,12 @@ export const Layout: React.FC = () => {
                           'mr-3 flex-shrink-0 h-6 w-6'
                         )}
                       />
-                      {item.name}
+                      <span className="flex-1">{item.name}</span>
+                      {item.name === 'Notifications' && unreadCount > 0 && (
+                        <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                          {unreadCount}
+                        </span>
+                      )}
                     </a>
                   );
                 })}

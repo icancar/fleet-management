@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/AuthService';
 import { User, UserRole } from '../models/User';
 import { ApiResponse } from '@fleet-management/shared';
+import { createError } from '../middleware/errorHandler';
 
 export class AuthController {
   /**
@@ -169,6 +170,32 @@ export class AuthController {
       const response: ApiResponse<any> = {
         success: true,
         message: 'Password changed successfully'
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Register FCM token for push notifications
+   */
+  registerFCMToken = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = (req as any).user._id;
+      const { fcmToken } = req.body;
+
+      if (!fcmToken) {
+        const error = createError('FCM token is required', 400);
+        return next(error);
+      }
+
+      await User.findByIdAndUpdate(userId, { fcmToken });
+
+      const response: ApiResponse<any> = {
+        success: true,
+        message: 'FCM token registered successfully'
       };
 
       res.json(response);

@@ -2,12 +2,19 @@ package com.fleetmanagement.tracker
 
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.Header
 import retrofit2.http.POST
 
 interface ApiService {
     
     @POST("location")
     suspend fun sendLocation(@Body locationData: LocationData): Response<LocationResponse>
+    
+    @POST("auth/fcm-token")
+    suspend fun registerFCMToken(
+        @Header("Authorization") token: String,
+        @Body request: FCMTokenRequest
+    ): Response<ApiResponse<Any>>
     
     companion object {
         fun create(): ApiService {
@@ -24,4 +31,10 @@ data class LocationResponse(
     val success: Boolean,
     val message: String?,
     val data: LocationData?
+)
+
+data class ApiResponse<T>(
+    val success: Boolean,
+    val message: String?,
+    val data: T?
 )

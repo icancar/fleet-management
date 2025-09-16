@@ -82,3 +82,7 @@ jspm_packages/
 .env
 mongodb-compass-*.dmg
 mongosh-*.zip
+
+# Firebase configuration files (contains sensitive keys)
+android/app/google-services.json
+server/serviceAccountKey.json

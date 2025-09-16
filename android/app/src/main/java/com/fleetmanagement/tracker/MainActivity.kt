@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
@@ -15,6 +16,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
     
@@ -30,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1002
         private val PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -38,6 +44,9 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.WAKE_LOCK,
             Manifest.permission.ACCESS_WIFI_STATE,
             Manifest.permission.READ_PHONE_STATE
+        )
+        private val NOTIFICATION_PERMISSIONS = arrayOf(
+            Manifest.permission.POST_NOTIFICATIONS
         )
     }
     
@@ -61,7 +70,9 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupObservers()
         checkPermissions()
+        checkNotificationPermissions()
         displayUserInfo()
+        initializeFirebase()
     }
     
     private fun initViews() {
@@ -121,6 +132,25 @@ class MainActivity : AppCompatActivity() {
         return true
     }
     
+    private fun checkNotificationPermissions(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val permissionsToRequest = mutableListOf<String>()
+            
+            for (permission in NOTIFICATION_PERMISSIONS) {
+                if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                    permissionsToRequest.add(permission)
+                }
+            }
+            
+            if (permissionsToRequest.isNotEmpty()) {
+                ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), NOTIFICATION_PERMISSION_REQUEST_CODE)
+                return false
+            }
+        }
+        
+        return true
+    }
+    
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -128,11 +158,20 @@ class MainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                Toast.makeText(this, "Location permissions granted", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Location permissions required for tracking", Toast.LENGTH_LONG).show()
+        when (requestCode) {
+            LOCATION_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                    Toast.makeText(this, "Location permissions granted", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Location permissions required for tracking", Toast.LENGTH_LONG).show()
+                }
+            }
+            NOTIFICATION_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                    Toast.makeText(this, "Notification permissions granted", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Notification permissions required for push notifications", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -191,5 +230,57 @@ class MainActivity : AppCompatActivity() {
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()
+    }
+    
+    private fun initializeFirebase() {
+        // Get FCM token and register it with the server
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Toast.makeText(this, "Failed to get FCM token", Toast.LENGTH_SHORT).show()
+                return@addOnCompleteListener
+            }
+            
+            val token = task.result
+            // Delay FCM token registration to ensure auth token is available
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                registerFCMTokenWithServer(token)
+            }, 1000) // 1 second delay
+        }
+    }
+    
+    private fun registerFCMTokenWithServer(token: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val apiService = ApiService.create()
+                val authToken = sharedPreferences.getString("auth_token", null)
+                
+                if (authToken == null) {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Not logged in, cannot register for push notifications", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                
+                val response = apiService.registerFCMToken("Bearer $authToken", FCMTokenRequest(token))
+                
+                runOnUiThread {
+                    if (response.isSuccessful) {
+                        Toast.makeText(this@MainActivity, "Push notifications enabled", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val errorMessage = when (response.code()) {
+                            401 -> "Authentication failed - please log in again"
+                            403 -> "Access denied - insufficient permissions"
+                            500 -> "Server error - please try again later"
+                            else -> "Failed to register for push notifications (${response.code()})"
+                        }
+                        Toast.makeText(this@MainActivity, errorMessage, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Error registering for push notifications", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 }
