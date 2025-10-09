@@ -19,7 +19,7 @@ interface ApiService {
     companion object {
         fun create(): ApiService {
             return retrofit2.Retrofit.Builder()
-                            .baseUrl("http://192.168.1.2:3001/api/") // Your computer's IP
+                            .baseUrl("http://192.168.1.8:3001/api/") // Your computer's IP address
                 .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
                 .build()
                 .create(ApiService::class.java)

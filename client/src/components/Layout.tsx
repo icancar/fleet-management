@@ -14,7 +14,8 @@ import {
   Settings,
   LogOut,
   Bell,
-  Search
+  Search,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '@shared/types';
@@ -33,6 +34,7 @@ const getNavigation = (userRole: UserRole) => {
         ...baseNavigation,
         { name: 'My Vehicle', href: '/vehicles', icon: Car },
         { name: 'My Routes', href: '/routes', icon: Route },
+        { name: 'Reports', href: '/reports', icon: FileText },
         { name: 'Notifications', href: '/notifications', icon: Bell },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
@@ -42,6 +44,7 @@ const getNavigation = (userRole: UserRole) => {
         { name: 'Drivers', href: '/drivers', icon: Users },
         { name: 'Vehicles', href: '/vehicles', icon: Car },
         { name: 'Driver Routes', href: '/manager-routes', icon: Route },
+        { name: 'Reports', href: '/reports', icon: FileText },
         { name: 'Notifications', href: '/notifications', icon: Bell },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];
@@ -51,6 +54,7 @@ const getNavigation = (userRole: UserRole) => {
         { name: 'Employees', href: '/drivers', icon: Users },
         { name: 'Vehicles', href: '/vehicles', icon: Car },
         { name: 'All Driver Routes', href: '/admin-routes', icon: Route },
+        { name: 'Reports', href: '/reports', icon: FileText },
         { name: 'Notifications', href: '/notifications', icon: Bell },
         { name: 'Settings', href: '/settings', icon: Settings },
       ];

@@ -111,7 +111,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun performLoginRequest(email: String, password: String): LoginResult {
-        val url = URL("http://192.168.1.2:3001/api/auth/login")
+        val url = URL("http://192.168.1.8:3001/api/auth/login")
         val connection = url.openConnection() as HttpURLConnection
         
         try {

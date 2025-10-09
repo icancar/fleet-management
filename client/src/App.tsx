@@ -8,6 +8,7 @@ import RoutesPage from './pages/Routes';
 import ManagerRoutes from './pages/ManagerRoutes';
 import AdminRoutes from './pages/AdminRoutes';
 import { Settings } from './pages/Settings';
+import { Reports } from './pages/Reports';
 import { Login } from './pages/Login';
 import Notifications from './pages/Notifications';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -30,6 +31,7 @@ function App() {
               <Route path="manager-routes" element={<ManagerRoutes />} />
               <Route path="admin-routes" element={<AdminRoutes />} />
               <Route path="notifications" element={<Notifications />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>

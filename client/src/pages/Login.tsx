@@ -110,11 +110,6 @@ export const Login: React.FC = () => {
             </button>
           </div>
 
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Demo credentials: admin@fleet.com / password
-            </p>
-          </div>
         </form>
       </div>
     </div>

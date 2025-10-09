@@ -309,7 +309,7 @@ class RouteMapActivity : AppCompatActivity() {
         return withContext(Dispatchers.IO) {
             try {
                 val deviceId = getDeviceIdentifier()
-                val urlString = "http://192.168.1.2:3001/api/location/routes/device/$deviceId?date=$date"
+                val urlString = "http://192.168.1.8:3001/api/location/routes/device/$deviceId?date=$date"
                 
                 val url = URL(urlString)
                 val connection = url.openConnection() as HttpURLConnection

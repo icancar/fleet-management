@@ -15,6 +15,7 @@ import locationEventsRoutes from './routes/locationEvents';
 import { managerRoutesRoutes } from './routes/managerRoutes';
 import { adminRoutesRoutes } from './routes/adminRoutes';
 import notificationRoutes from './routes/notifications';
+import reportsRoutes from './routes/reports';
 import { connectDatabase } from './config/database';
 
 // Load environment variables
@@ -57,6 +58,7 @@ app.use('/api/location', locationRoutes);
 app.use('/api/manager-routes', managerRoutesRoutes);
 app.use('/api/admin-routes', adminRoutesRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);
